@@ -26,5 +26,7 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Kuterlapa nagrywa mowę, żeby zamienić ją na tekst.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Hooki Kuterłapy mogą sterować urządzeniami w sieci domowej, na przykład zatrzymać telewizor, gdy mówisz.</string>
 </dict>
 </plist>
