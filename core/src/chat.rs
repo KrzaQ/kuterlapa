@@ -11,7 +11,8 @@
 //!                                      answer (which also ends a command
 //!                                      thread)
 //!   recall (ZR)                        show the last answer again
-//!   voice toggle (Y hold)              read answers aloud, or stop
+//!   voice toggle (Y hold)              cycle the voice mode: off, read the
+//!                                      answer, talk (short spoken answers)
 //!
 //! While a command's answer is on screen, the next command continues it
 //! as a thread. Closing the answer, or a long pause, starts a new thread.
@@ -19,7 +20,7 @@
 use crate::profiles::Current;
 use crate::sessions;
 use crate::store::{Message, Store};
-use crate::{engines, shell, speech, voice};
+use crate::{engines, paths, shell, speech, voice};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -27,6 +28,54 @@ use std::time::{Duration, Instant};
 
 const THREAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const HISTORY: usize = 30;
+
+/// How the narrator voice takes part.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum VoiceMode {
+    /// Answers only on screen.
+    #[default]
+    Off,
+    /// The narrator reads every answer as the model wrote it.
+    Read,
+    /// The narrator reads every answer, and the model knows it: it answers
+    /// briefly and in spoken style, for a flowing conversation.
+    Talk,
+}
+
+impl VoiceMode {
+    fn next(self) -> VoiceMode {
+        match self {
+            VoiceMode::Off => VoiceMode::Read,
+            VoiceMode::Read => VoiceMode::Talk,
+            VoiceMode::Talk => VoiceMode::Off,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            VoiceMode::Off => "off",
+            VoiceMode::Read => "read",
+            VoiceMode::Talk => "talk",
+        }
+    }
+
+    fn from_name(name: &str) -> VoiceMode {
+        match name.trim() {
+            "read" => VoiceMode::Read,
+            "talk" => VoiceMode::Talk,
+            _ => VoiceMode::Off,
+        }
+    }
+
+    /// Kept in ~/.local/state/kuterlapa/voice-mode across restarts.
+    fn load() -> VoiceMode {
+        VoiceMode::from_name(&std::fs::read_to_string(paths::state_dir().join("voice-mode")).unwrap_or_default())
+    }
+
+    fn save(self) {
+        let _ = std::fs::write(paths::state_dir().join("voice-mode"), self.name());
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Mode {
@@ -47,7 +96,7 @@ struct State {
     visible: bool,
     thread: Option<i64>,
     last_activity: Option<Instant>,
-    voice: bool,
+    voice: VoiceMode,
     note: Option<String>,
 }
 
@@ -59,7 +108,8 @@ pub struct Chat {
 
 impl Chat {
     pub fn new(profiles: Arc<Current>, store: Arc<Store>) -> Chat {
-        Chat { state: Mutex::new(State::default()), profiles, store }
+        let state = State { voice: VoiceMode::load(), ..State::default() };
+        Chat { state: Mutex::new(state), profiles, store }
     }
 
     pub fn takes_dictation(&self) -> bool {
@@ -146,7 +196,7 @@ impl Chat {
                 Ok((answer, thread)) => {
                     s.thread = thread;
                     s.answer = answer;
-                    s.voice.then(|| s.answer.clone())
+                    (s.voice != VoiceMode::Off).then(|| s.answer.clone())
                 }
                 Err(e) => {
                     eprintln!("chat: {e:#}");
@@ -240,15 +290,20 @@ impl Chat {
     }
 
     pub fn toggle_voice(self: &Arc<Self>) {
-        let on = {
+        let mode = {
             let mut s = self.state.lock().unwrap();
-            s.voice = !s.voice;
+            s.voice = s.voice.next();
             s.voice
         };
-        if !on {
+        mode.save();
+        if mode == VoiceMode::Off {
             voice::send("stop");
         }
-        self.flash(if on { "Odpowiedzi głosowe: włączone" } else { "Odpowiedzi głosowe: wyłączone" });
+        self.flash(match mode {
+            VoiceMode::Off => "Lektor: wyłączony",
+            VoiceMode::Read => "Lektor: czyta całe odpowiedzi",
+            VoiceMode::Talk => "Lektor: rozmowa (krótkie odpowiedzi)",
+        });
     }
 
     pub fn profile_changed(self: &Arc<Self>, name: &str) {
@@ -286,7 +341,11 @@ impl Chat {
             (Mode::Command, true) => "Ciąg dalszy polecenia",
             (Mode::Command, false) => "Polecenie",
         };
-        let speaker = if s.voice { " · 🔊" } else { "" };
+        let speaker = match s.voice {
+            VoiceMode::Off => "",
+            VoiceMode::Read => " · 🔊",
+            VoiceMode::Talk => " · 🗣",
+        };
         let title = format!("{kind} · {session} · {profile}{speaker}");
         let status = if let Some(note) = &s.note {
             note.clone()
@@ -325,15 +384,17 @@ impl Chat {
     }
 }
 
-fn system_prompt(mode: Mode, session: &sessions::Session, voice: bool) -> String {
+fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> String {
     let mut p = String::from(
         "Jesteś asystentem w Kuterłapie. Użytkownik pracuje głosem: dyktuje, a rozpoznawanie mowy bywa \
          niedokładne, więc domyślaj się sensu. Odpowiadaj krótko i konkretnie, po polsku, chyba że \
          użytkownik prosi inaczej. Odpowiedź pojawi się w małym oknie w rogu ekranu.",
     );
-    if voice {
+    // Read: the answer is read as written, so the prompt does not change.
+    if voice == VoiceMode::Talk {
         p.push_str(
-            " Odpowiedź zostanie też przeczytana na głos: pisz zdaniami do słuchania, bez list, tabel i \
+            " Lektor przeczyta Twoją odpowiedź na głos, a użytkownik prowadzi z Tobą płynną rozmowę: \
+             streszczaj się, mów jak w rozmowie, zwykle jednym do trzech zdań, bez list, tabel i \
              bloków kodu.",
         );
     }
