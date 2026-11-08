@@ -25,6 +25,9 @@ pub fn supervise(command: Vec<String>) {
         match Command::new(&program).args(&args).stdin(Stdio::piped()).spawn() {
             Ok(mut child) => {
                 eprintln!("speech: provider started (pid {})", child.id());
+                // Child::wait closes the child's stdin first, which would
+                // tell the provider to exit. Keep our end open until then.
+                let _stdin = child.stdin.take();
                 let status = child.wait();
                 eprintln!("speech: provider exited: {status:?}");
             }
