@@ -1,0 +1,6 @@
+# Copy to Makefile.local (git ignores it) and set your own values.
+
+# A code signing identity from your keychain, so that macOS keeps the
+# app's permissions across rebuilds. List them with:
+#   security find-identity -p codesigning
+SIGN_IDENTITY = <your-identity>
