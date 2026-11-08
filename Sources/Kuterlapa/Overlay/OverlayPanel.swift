@@ -9,8 +9,10 @@ final class OverlayPanel {
     private let panel: NSPanel
     private let titleLabel = OverlayPanel.label(size: 12, weight: .semibold, color: .secondaryLabelColor)
     private let statusLabel = OverlayPanel.label(size: 12, weight: .regular, color: .systemOrange)
+    private let headingLabel = OverlayPanel.label(size: 22, weight: .bold, color: .labelColor)
     private let textLabel = OverlayPanel.label(size: 15, weight: .regular, color: .labelColor)
     private let hintLabel = OverlayPanel.label(size: 11, weight: .regular, color: .tertiaryLabelColor)
+    private let detailLabel = OverlayPanel.label(size: 12, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
     private var background: NSVisualEffectView!
     private let width: CGFloat = 440
@@ -40,7 +42,7 @@ final class OverlayPanel {
         buttonRow.spacing = 10
         buttonRow.isHidden = true
 
-        let stack = NSStackView(views: [titleLabel, statusLabel, textLabel, buttonRow, hintLabel])
+        let stack = NSStackView(views: [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -55,7 +57,7 @@ final class OverlayPanel {
             stack.widthAnchor.constraint(equalToConstant: width),
             buttonRow.widthAnchor.constraint(equalToConstant: width - 28),
         ])
-        for label in [titleLabel, statusLabel, textLabel, hintLabel] {
+        for label in [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, hintLabel] {
             label.preferredMaxLayoutWidth = width - 28
         }
         panel.contentView = background
@@ -63,6 +65,8 @@ final class OverlayPanel {
 
     /// Shows or hides the panel. `state` comes from the core as JSON:
     /// {"visible": true, "title": "...", "status": "...", "text": "...", "hint": "..."}
+    /// Optional: "heading" (large, above the text) and "detail" (small,
+    /// below it).
     ///
     /// When the user has to decide, the core adds large buttons and asks for
     /// attention, which plays a sound and draws a frame around the panel:
@@ -76,7 +80,9 @@ final class OverlayPanel {
         }
         set(titleLabel, state["title"])
         set(statusLabel, state["status"])
+        set(headingLabel, state["heading"])
         set(textLabel, state["text"])
+        set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
         let attention = state["attention"] as? Bool == true

@@ -31,9 +31,11 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     }
     shell::overlay(&json!({
         "visible": true,
-        "title": format!("Zgoda · {tool}"),
+        "title": "Zgoda",
         "status": "Czekam na Twoją decyzję",
-        "text": format!("{description}\n\n{command}").trim().to_string(),
+        "heading": tool.replace('_', " "),
+        "text": description,
+        "detail": command,
         "buttons": [
             { "key": "A", "label": "Tak", "tone": "yes" },
             { "key": "B", "label": "Nie", "tone": "no" },
