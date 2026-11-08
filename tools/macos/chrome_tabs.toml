@@ -1,0 +1,3 @@
+description = "List Google Chrome's windows and their tabs (title and address); * marks the active tab. Tabs are numbered window.tab, for example 2.5."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "tabs"]
+timeout = 20

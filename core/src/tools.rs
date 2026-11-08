@@ -1,8 +1,15 @@
 //! Tools the model may call: programs described by TOML files.
 //!
-//! Global tools live in ~/.config/kuterlapa/tools/, a session's tools in
-//! ~/.config/kuterlapa/sessions/<name>/tools/. The file name is the tool
-//! name; a session tool replaces a global tool with the same name.
+//! Tools come from three folders; a later one replaces a tool of the same
+//! name from an earlier one:
+//!
+//!   ~/.local/share/kuterlapa/tools/              packs that `make install`
+//!                                                copies for this system
+//!   ~/.config/kuterlapa/tools/                   the user's own tools
+//!   ~/.config/kuterlapa/sessions/<name>/tools/   tools of one session
+//!
+//! The file name is the tool name. A command argument that starts with "./"
+//! (the program or a script it runs) is relative to the tool's file.
 //!
 //!   # ~/.config/kuterlapa/tools/youtube_speed.toml
 //!   description = "Set the playback speed of YouTube on the TV."
@@ -74,7 +81,7 @@ fn yes() -> bool {
 /// is skipped with a message, so one typo does not hide the other tools.
 pub fn load(session: Option<&str>) -> Vec<Tool> {
     let mut tools = BTreeMap::new();
-    let mut dirs = vec![paths::config_dir().join("tools")];
+    let mut dirs = vec![paths::data_dir().join("tools"), paths::config_dir().join("tools")];
     if let Some(session) = session {
         dirs.push(paths::config_dir().join("sessions").join(session).join("tools"));
     }
@@ -106,6 +113,13 @@ fn read(path: &Path) -> Result<Tool> {
     let mut tool: Tool = toml::from_str(&text).context("parsing")?;
     if tool.command.is_empty() {
         bail!("command is empty");
+    }
+    if let Some(dir) = path.parent() {
+        for arg in &mut tool.command {
+            if let Some(file) = arg.strip_prefix("./") {
+                *arg = dir.join(file).to_string_lossy().into_owned();
+            }
+        }
     }
     tool.name = name;
     Ok(tool)

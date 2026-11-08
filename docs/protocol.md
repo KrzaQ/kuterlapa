@@ -52,6 +52,9 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `scroll <x> <y> <dx> <dy>` | Scroll at a point by pixels. |
 | `apps` | Running applications, joined with ` \| `; `*` marks the one in front. |
 | `activate <name>` | Bring an application to the front, or open it. |
+| `windows` | All windows, numbered, with their virtual desktop (and the profile of a Chrome window), joined with ` \| `. |
+| `focus <n>` | Go to window `n` from the last `windows` list: its desktop, then raise it. |
+| `desktop <n\|left\|right>` | Go to a virtual desktop. |
 
 Points are screen coordinates with 0,0 in the top left corner of the main
 display. The core's MCP server offers these to the model as the

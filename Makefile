@@ -16,6 +16,7 @@ APP_DIR ?= $(HOME)/Applications
 BIN_DIR ?= $(HOME)/.local/bin
 LOG_FILE ?= $(HOME)/Library/Logs/Kuterlapa.log
 CONFIG_DIR ?= $(or $(XDG_CONFIG_HOME),$(HOME)/.config)/kuterlapa
+DATA_DIR ?= $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/kuterlapa
 # Speech recognition backend to install: mlx (Apple Silicon) or faster-whisper.
 SPEECH_BACKEND ?= mlx
 # Extra for the voice provider: empty (say, command) or mlx (local models).
@@ -55,13 +56,15 @@ test: ## Run the core's tests
 speech: ## Set up the speech provider's environment with SPEECH_BACKEND (default mlx)
 	cd speech && uv sync --extra $(SPEECH_BACKEND)
 
-install: build ## Install the app, the CLI, the speech and voice providers and example settings
+install: build ## Install the app, the CLI, the providers, the macOS tool pack and example settings
 	mkdir -p $(APP_DIR) $(BIN_DIR)
 	rm -rf $(APP_DIR)/Kuterlapa.app
 	cp -R $(APP) $(APP_DIR)/Kuterlapa.app
 	ln -sf $(APP_DIR)/Kuterlapa.app/Contents/Helpers/kuterlapa $(BIN_DIR)/kuterlapa
 	uv tool install --force --reinstall './speech[$(SPEECH_BACKEND)]'
 	uv tool install --force --reinstall './voice$(if $(VOICE_EXTRA),[$(VOICE_EXTRA)])'
+	mkdir -p $(DATA_DIR)/tools
+	cp tools/macos/* $(DATA_DIR)/tools/
 	mkdir -p $(CONFIG_DIR)
 	for f in config.toml mapping.json profiles.json submit.json speech.toml voice.toml dictionary.txt replacements.txt; do \
 		[ -e $(CONFIG_DIR)/$$f ] || cp config/$$f.example $(CONFIG_DIR)/$$f; \

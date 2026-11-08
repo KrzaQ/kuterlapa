@@ -1,0 +1,14 @@
+description = "Open an address in Google Chrome: a new tab in the front window, or a window of a given profile (chrome_profiles lists them)."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "open", "{url}", "{profile}", "{new_window}"]
+timeout = 20
+
+[params.url]
+description = "The address, for example https://example.com"
+
+[params.profile]
+description = "A profile name; leave it out for the front window"
+required = false
+
+[params.new_window]
+description = "\"new\" to open a new window instead of a tab"
+required = false

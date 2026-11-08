@@ -1,0 +1,11 @@
+description = "Bring an iTerm2 tab to the front, by the numbers from iterm_tabs."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "tab", "{window}", "{tab}"]
+timeout = 20
+
+[params.window]
+type = "integer"
+description = "Window number, the part before the dot"
+
+[params.tab]
+type = "integer"
+description = "Tab number, the part after the dot"
