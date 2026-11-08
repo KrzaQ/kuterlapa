@@ -20,6 +20,7 @@ The core starts the provider with a pipe on stdin. When the pipe closes,
 the provider exits.
 """
 
+import collections
 import datetime
 import os
 import queue
@@ -56,31 +57,65 @@ def core_request(line):
         return s.recv(1024).decode().strip()
 
 
+PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
+
+
 class Dictation:
+    """Records while the user dictates.
+
+    The microphone stream stays open for the whole life of the provider,
+    and a recording only decides whether its frames are kept. Stopping a
+    stream on macOS can deadlock inside CoreAudio (seen 2026-11-08:
+    Pa_StopStream waited on a HAL mutex that the audio thread held), and
+    then every later request hung. An open stream also keeps the first
+    words: frames from just before the press go into the recording.
+    The cost: macOS shows its microphone indicator all the time.
+    """
+
     def __init__(self, backend, settings):
         self.backend = backend
         self.settings = settings
         self.lock = threading.Lock()
-        self.stream = None
+        self.recording = False
         self.frames = None  # audio callback -> segmenter thread
         self.pieces = None  # segmenter thread -> transcriber thread
+        self.pre_roll = collections.deque(maxlen=PRE_ROLL_FRAMES)
         self.recorded = []
         self.texts = []
         self.wav = None
         self.last_text = ""
         self.cancelled = False
         self.workers = []
+        self.stream = None
+        self._open_stream()
+
+    def _open_stream(self):
+        def on_audio(indata, _frames, _time, status):
+            if status:
+                log(f"audio: {status}")
+            frame = indata[:, 0].copy()
+            if self.recording:
+                self.frames.put(frame)
+            else:
+                self.pre_roll.append(frame)
+
+        self.stream = sd.InputStream(
+            samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
+            device=self.settings.microphone or None, callback=on_audio,
+        )
+        self.stream.start()
+        log("microphone open")
 
     def toggle(self):
         with self.lock:
-            if self.stream is None:
+            if not self.recording:
                 self._start()
             else:
                 self._stop()
 
     def cancel(self):
         with self.lock:
-            if self.stream is not None:
+            if self.recording:
                 self._stop(cancelled=True)
 
     def finish(self):
@@ -90,7 +125,7 @@ class Dictation:
         Enter, so the Enter comes after the whole text.
         """
         with self.lock:
-            if self.stream is None:
+            if not self.recording:
                 return "idle"
             self._stop()
             workers = list(self.workers)
@@ -99,23 +134,23 @@ class Dictation:
         return "stopped"
 
     def _start(self):
+        # The previous recording's workers read self.frames and self.pieces;
+        # let them finish before those point to new queues.
+        for w in self.workers:
+            w.join()
         day = Path(self.settings.recordings) / f"{datetime.date.today():%Y-%m-%d}"
         day.mkdir(parents=True, exist_ok=True)
         self.wav = day / f"{datetime.datetime.now():%H%M%S}.wav"
         self.frames, self.pieces = queue.Queue(), queue.Queue()
         self.recorded, self.texts = [], []
         self.cancelled = False
-
-        def on_audio(indata, _frames, _time, status):
-            if status:
-                log(f"audio: {status}")
-            self.frames.put(indata[:, 0].copy())
-
-        self.stream = sd.InputStream(
-            samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
-            device=self.settings.microphone or None, callback=on_audio,
-        )
-        self.stream.start()
+        if not self.stream.active:
+            # The device went away (for example a headset), so open it again.
+            log("microphone stream stopped; opening it again")
+            self._open_stream()
+        for frame in list(self.pre_roll):
+            self.frames.put(frame)
+        self.recording = True
         self.workers = [
             threading.Thread(target=self._segment, daemon=True),
             threading.Thread(target=self._transcribe, daemon=True),
@@ -127,9 +162,7 @@ class Dictation:
 
     def _stop(self, cancelled=False):
         self.cancelled = cancelled
-        self.stream.stop()
-        self.stream.close()
-        self.stream = None
+        self.recording = False
         self.frames.put(None)  # ends the segmenter, which ends the transcriber
         play(self.settings.sound_error if cancelled else self.settings.sound_stop)
         log("cancelled" if cancelled else "stopped")
@@ -206,7 +239,7 @@ def serve(dictation):
         cmd = conn.recv(256).decode().strip()
         if cmd == "status":
             with conn:
-                state = "recording" if dictation.stream is not None else "idle"
+                state = "recording" if dictation.recording else "idle"
                 conn.sendall(f"{state}\n".encode())
             continue
         if cmd == "finish":
