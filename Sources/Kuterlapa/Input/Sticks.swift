@@ -5,8 +5,11 @@ import Foundation
 /// request); the movement itself stays here, because a round trip to the
 /// core for every frame would lag.
 ///
-/// Roles: "mouse" moves the pointer, "scroll" scrolls, anything else does
-/// nothing. Speed grows with the square of the tilt, so a small tilt gives
+/// Roles: "mouse" moves the pointer, "scroll" scrolls (stick up shows what
+/// is above), "scroll-inverted" scrolls the other way, anything else does
+/// nothing. Tools such as Scroll Reverser flip wheel events they take for a
+/// mouse, and the stick's events look like a mouse to them; then
+/// "scroll-inverted" gives the expected direction. Speed grows with the square of the tilt, so a small tilt gives
 /// fine control and a full tilt moves fast.
 final class Sticks {
     private let gamepad: Gamepad
@@ -48,15 +51,15 @@ final class Sticks {
         case "mouse":
             // Stick up is +y; screen coordinates grow downwards.
             Mouse.move(by: CGPoint(x: v.x * pointerSpeed * frame, y: -v.y * pointerSpeed * frame))
-        case "scroll":
-            scrollRest.x += v.x * scrollSpeed * frame
-            scrollRest.y += v.y * scrollSpeed * frame
+        case "scroll", "scroll-inverted":
+            let sign: CGFloat = role == "scroll" ? 1 : -1
+            scrollRest.x += sign * v.x * scrollSpeed * frame
+            scrollRest.y += sign * v.y * scrollSpeed * frame
             let dx = Int32(scrollRest.x), dy = Int32(scrollRest.y)
             scrollRest.x -= CGFloat(dx)
             scrollRest.y -= CGFloat(dy)
-            // Stick up scrolls up: content moves down, as on a trackpad
-            // with "natural" scrolling off. -dx: stick right shows content
-            // further right.
+            // Stick up scrolls up: content moves down and shows what is
+            // above. -dx: stick right shows content further right.
             if dx != 0 || dy != 0 { Mouse.scroll(dx: -dx, dy: dy) }
         default:
             break

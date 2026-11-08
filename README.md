@@ -73,7 +73,9 @@ All in `~/.config/kuterlapa/`:
 - `mapping.json`: button → action. A button can also have a double press
   (`"X double"`) and a hold (`"Y hold"`); only buttons that have them wait
   to tell the gestures apart. `"LeftStick"` and `"RightStick"` take
-  `"scroll"` or `"mouse"`. An action is `"dictate"`, `"draft"`,
+  `"scroll"`, `"scroll-inverted"` or `"mouse"`. Use `"scroll-inverted"`
+  when a tool such as Scroll Reverser flips mouse wheel events: it takes
+  the stick for a mouse. An action is `"dictate"`, `"draft"`,
   `"next-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation, or press Escape),
