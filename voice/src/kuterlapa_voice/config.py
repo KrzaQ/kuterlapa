@@ -14,6 +14,7 @@ def _base(variable, fallback):
 CONFIG = _base("XDG_CONFIG_HOME", ".config")
 STATE = _base("XDG_STATE_HOME", ".local/state")
 VOICE_SOCKET = STATE / "voice.sock"
+CORE_SOCKET = STATE / "core.sock"
 
 
 @dataclass

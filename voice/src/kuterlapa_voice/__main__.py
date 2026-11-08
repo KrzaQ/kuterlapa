@@ -11,6 +11,10 @@ The text is split into pieces (pieces.py). One thread makes pieces with
 the backend, another plays them, so the next piece is ready when the
 current one ends.
 
+The provider tells the core when it starts and stops speaking ("state
+speaking on", "state speaking off" on core.sock), so the core can run its
+hooks.
+
 The core starts the provider with a pipe on stdin. When the pipe closes,
 the provider exits.
 """
@@ -32,6 +36,31 @@ def log(msg):
     print(f"{datetime.datetime.now():%H:%M:%S} voice: {msg}", flush=True)
 
 
+_states = queue.Queue()
+
+
+def _send_states():
+    while True:
+        line = _states.get()
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(10)
+                s.connect(str(config.CORE_SOCKET))
+                s.sendall((line + "\n").encode())
+                s.recv(1024)
+        except OSError as e:
+            log(f"core: {e}")
+
+
+threading.Thread(target=_send_states, daemon=True).start()
+
+
+def report(speaking):
+    """Tell the core that speech started or stopped. One thread sends the
+    reports in order, so "off" never overtakes "on"."""
+    _states.put(f"state speaking {'on' if speaking else 'off'}")
+
+
 class Reader:
     def __init__(self, backend, settings):
         self.backend = backend
@@ -50,9 +79,12 @@ class Reader:
         s = self.settings
         with self.lock:
             generation = self.generation
+            was_busy = self.busy > 0
             for piece in split(text, s.first_piece_chars, s.piece_chars):
                 self.busy += 1
                 self.texts.put((generation, piece))
+            if self.busy > 0 and not was_busy:
+                report(True)
 
     def stop(self):
         with self.lock:
@@ -65,6 +97,8 @@ class Reader:
     def _done(self):
         with self.lock:
             self.busy = max(0, self.busy - 1)
+            if self.busy == 0:
+                report(False)
 
     def _make(self):
         while True:

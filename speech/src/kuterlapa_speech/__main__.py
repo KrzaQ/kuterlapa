@@ -14,7 +14,9 @@ line per connection:
 
 While recording, it cuts the audio at pauses in speech. Each piece goes to
 Whisper at once, and the text goes to the Kuterlapa core
-(request "dictate <text>" on ~/.local/state/kuterlapa/core.sock).
+(request "dictate <text>" on ~/.local/state/kuterlapa/core.sock). It also
+tells the core when recording starts and stops ("state listening on",
+"state listening off").
 
 The core starts the provider with a pipe on stdin. When the pipe closes,
 the provider exits.
@@ -55,6 +57,30 @@ def core_request(line):
         s.connect(str(config.CORE_SOCKET))
         s.sendall((line.replace("\n", " ") + "\n").encode())
         return s.recv(1024).decode().strip()
+
+
+_states = queue.Queue()
+
+
+def _send_states():
+    while True:
+        line = _states.get()
+        try:
+            core_request(line)
+        except OSError as e:
+            log(f"core: {e}")
+
+
+threading.Thread(target=_send_states, daemon=True).start()
+
+
+def report(listening):
+    """Tell the core that recording started or stopped (it runs hooks).
+
+    One thread sends the reports in order, so recording never waits for the
+    core, and "off" never overtakes "on".
+    """
+    _states.put(f"state listening {'on' if listening else 'off'}")
 
 
 PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
@@ -181,6 +207,7 @@ class Dictation:
         for frame in list(self.pre_roll):
             self.frames.put(frame)
         self.recording = True
+        report(True)
         self.workers = [
             threading.Thread(target=self._segment, daemon=True),
             threading.Thread(target=self._transcribe, daemon=True),
@@ -193,6 +220,7 @@ class Dictation:
     def _stop(self, cancelled=False):
         self.cancelled = cancelled
         self.recording = False
+        report(False)
         self.last_used = time.monotonic()
         self.frames.put(None)  # ends the segmenter, which ends the transcriber
         play(self.settings.sound_error if cancelled else self.settings.sound_stop)
