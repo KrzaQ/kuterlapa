@@ -154,7 +154,13 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::NextProfile => (Model, "następny model", "przełącz na następny profil modelu".into()),
         Action::PreviousProfile => (Model, "poprzedni model", "przełącz na poprzedni profil modelu".into()),
         Action::Recall => (Model, "ostatnia odpowiedź", "pokaż ostatnią odpowiedź jeszcze raz".into()),
-        Action::NewConversation => (Model, "nowa rozmowa", "zacznij nową rozmowę w bieżącej sesji".into()),
+        Action::NewConversation => (
+            Model,
+            "nowa rozmowa / polecenie",
+            "zacznij nową rozmowę w bieżącej sesji; gdy w okienku jest odpowiedź polecenia: zakończ tylko \
+             wątek polecenia (następne Y ×2 zacznie od nowa), rozmowa w sesji zostaje"
+                .into(),
+        ),
         Action::VoiceToggle => (Model, "tryb lektora", "zmień tryb lektora: wyłączony → czyta odpowiedzi → rozmowa".into()),
         Action::VoiceStop => (Model, "cisza", "ucisz lektora (i zatrzymaj telewizor)".into()),
         Action::Help => (Model, "ta pomoc", "pokaż albo schowaj tę pomoc".into()),

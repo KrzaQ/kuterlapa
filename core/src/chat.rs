@@ -333,7 +333,28 @@ impl Chat {
 
     /// Start a new conversation in the current session. The next message
     /// (Y) goes there, without the earlier history.
+    /// The new-conversation button. While a command's answer shows, it
+    /// ends only that command's thread, so the next command starts fresh
+    /// and the session's conversation stays. Otherwise it starts a new
+    /// conversation in the session.
     pub fn new_conversation(self: &Arc<Self>) {
+        {
+            let mut s = self.state.lock().unwrap();
+            if s.recording || s.busy {
+                return;
+            }
+            if s.visible && s.mode == Mode::Command {
+                s.thread = None;
+                s.visible = false;
+                s.question.clear();
+                s.answer.clear();
+                s.error = None;
+                drop(s);
+                voice::send("stop");
+                self.flash("Nowe polecenie");
+                return;
+            }
+        }
         let session = sessions::current_name();
         if let Err(e) = self.store.new_conversation(&session) {
             eprintln!("new conversation: {e:#}");
@@ -463,8 +484,10 @@ impl Chat {
         }
         let hint = if s.recording {
             "Y: wyślij · A: wyślij · B: anuluj"
+        } else if s.mode == Mode::Command && s.thread.is_some() {
+            "Y Y: dopytaj · +: nowe polecenie · Y: rozmowa · B: zamknij"
         } else if s.mode == Mode::Command {
-            "Y Y: dopytaj · Y: rozmowa · B: zamknij"
+            "Y Y: nowe polecenie · Y: rozmowa · B: zamknij"
         } else {
             "Y: dalej · Y Y: polecenie · B: zamknij"
         };
