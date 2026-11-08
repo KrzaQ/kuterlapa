@@ -19,6 +19,11 @@ prompt_intro = "Rozmawiamy po polsku z angielskimi terminami IT."
 # Input device name; empty means the system default.
 microphone = ""
 
+# Close the microphone after this many seconds without a recording, so
+# macOS stops showing its microphone indicator. 0 keeps it open all the
+# time. While it is open, the words just before a button press are kept.
+microphone_idle_close = 30
+
 # Word lists for Whisper's context, one word or phrase per line,
 # most important first. Whisper reads only about 200 tokens of context.
 dictionaries = ["~/.config/kuterlapa/dictionary.txt"]

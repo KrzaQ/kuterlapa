@@ -60,16 +60,23 @@ def core_request(line):
 PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
 
 
+CLOSE_TIMEOUT_S = 3.0
+
+
 class Dictation:
     """Records while the user dictates.
 
-    The microphone stream stays open for the whole life of the provider,
-    and a recording only decides whether its frames are kept. Stopping a
+    The microphone stream stays open between recordings, and a recording
+    only decides whether its frames are kept. An open stream keeps the
+    first words: frames from just before the press go into the recording.
+
+    After `microphone_idle_close` seconds without a recording, the stream
+    closes, so macOS stops showing its microphone indicator. Closing a
     stream on macOS can deadlock inside CoreAudio (seen 2026-11-08:
-    Pa_StopStream waited on a HAL mutex that the audio thread held), and
-    then every later request hung. An open stream also keeps the first
-    words: frames from just before the press go into the recording.
-    The cost: macOS shows its microphone indicator all the time.
+    Pa_StopStream waited on a HAL mutex that the audio thread held). So
+    the stream never closes while a request waits for it: a separate
+    thread closes it, and if that hangs, the provider exits and the core
+    starts a fresh one.
     """
 
     def __init__(self, backend, settings):
@@ -87,7 +94,28 @@ class Dictation:
         self.cancelled = False
         self.workers = []
         self.stream = None
-        self._open_stream()
+        self.last_used = time.monotonic()
+        if settings.microphone_idle_close > 0:
+            threading.Thread(target=self._close_when_idle, daemon=True).start()
+        else:
+            self._open_stream()
+
+    def _close_when_idle(self):
+        while True:
+            time.sleep(1)
+            with self.lock:
+                idle = time.monotonic() - self.last_used
+                if self.recording or self.stream is None or idle < self.settings.microphone_idle_close:
+                    continue
+                stream, self.stream = self.stream, None
+                self.pre_roll.clear()
+            closer = threading.Thread(target=lambda: (stream.abort(), stream.close()), daemon=True)
+            closer.start()
+            closer.join(CLOSE_TIMEOUT_S)
+            if closer.is_alive():
+                log("closing the microphone hung in CoreAudio; exiting so the core restarts us")
+                os._exit(3)
+            log("microphone closed after idle time")
 
     def _open_stream(self):
         def on_audio(indata, _frames, _time, status):
@@ -144,7 +172,9 @@ class Dictation:
         self.frames, self.pieces = queue.Queue(), queue.Queue()
         self.recorded, self.texts = [], []
         self.cancelled = False
-        if not self.stream.active:
+        if self.stream is None:
+            self._open_stream()
+        elif not self.stream.active:
             # The device went away (for example a headset), so open it again.
             log("microphone stream stopped; opening it again")
             self._open_stream()
@@ -163,6 +193,7 @@ class Dictation:
     def _stop(self, cancelled=False):
         self.cancelled = cancelled
         self.recording = False
+        self.last_used = time.monotonic()
         self.frames.put(None)  # ends the segmenter, which ends the transcriber
         play(self.settings.sound_error if cancelled else self.settings.sound_stop)
         log("cancelled" if cancelled else "stopped")

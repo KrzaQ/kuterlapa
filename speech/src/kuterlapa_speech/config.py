@@ -41,6 +41,10 @@ class Settings:
     prompt_intro: str = "Rozmawiamy po polsku z angielskimi terminami IT."
     # Input device name; empty means the system default.
     microphone: str = ""
+    # Close the microphone after this many seconds without a recording, so
+    # macOS stops showing its microphone indicator. 0 keeps it open. While
+    # it is open, the first words before a button press are kept too.
+    microphone_idle_close: float = 30.0
     # Word lists for Whisper's context, most important first.
     dictionaries: list[str] = field(default_factory=lambda: [str(CONFIG / "dictionary.txt")])
     replacements: str = str(CONFIG / "replacements.txt")
