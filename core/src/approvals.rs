@@ -32,9 +32,13 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     shell::overlay(&json!({
         "visible": true,
         "title": format!("Zgoda · {tool}"),
-        "status": "Model chce użyć narzędzia",
+        "status": "Czekam na Twoją decyzję",
         "text": format!("{description}\n\n{command}").trim().to_string(),
-        "hint": "A: tak · B: nie",
+        "buttons": [
+            { "key": "A", "label": "Tak", "tone": "yes" },
+            { "key": "B", "label": "Nie", "tone": "no" },
+        ],
+        "attention": true,
     }));
     if hooks::voice_mode() != "off" {
         voice::send(&format!("say Czy pozwalasz? {description}"));

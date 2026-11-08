@@ -77,7 +77,9 @@ fn call(tools: &[Tool], params: &Value) -> Value {
     };
     eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
     if tool.confirm {
-        let shown = tool.argv(arguments).map(|a| a.join(" ")).unwrap_or_default();
+        // Shorter to read: the home folder as "~".
+        let home = paths::home().to_string_lossy().into_owned();
+        let shown = tool.argv(arguments).map(|a| a.join(" ").replace(&home, "~")).unwrap_or_default();
         let question = json!({ "tool": name, "description": tool.description, "command": shown });
         let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {question}"), APPROVAL_WAIT)
             .unwrap_or_else(|e| format!("error: {e}"));
