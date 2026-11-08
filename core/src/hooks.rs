@@ -157,7 +157,7 @@ fn queue(event: String, delay: Duration) {
     }
 }
 
-fn voice_mode() -> String {
+pub fn voice_mode() -> String {
     let mode = std::fs::read_to_string(paths::state_dir().join("voice-mode")).unwrap_or_default();
     match mode.trim() {
         "read" | "talk" => mode.trim().to_string(),

@@ -229,7 +229,7 @@ impl Chat {
                 let history = self.store.messages(conversation, HISTORY)?;
                 self.store.add_message(conversation, "user", question, None)?;
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref())?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_message(conversation, "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, None))
             }
@@ -240,7 +240,7 @@ impl Chat {
                 };
                 let thread = self.store.add_command(thread, Some(&session.name), "user", question, None)?;
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref())?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, Some(thread)))
             }
@@ -353,6 +353,12 @@ impl Chat {
                 me.show();
             }
         });
+    }
+
+    /// Shows the overlay as the chat state says, for example after a
+    /// question about a tool covered it.
+    pub fn refresh(&self) {
+        self.show();
     }
 
     fn show(&self) {

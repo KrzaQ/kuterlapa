@@ -1,5 +1,6 @@
 //! The core service: turns buttons and dictated text into actions.
 
+use crate::approvals;
 use crate::chat::{Chat, Mode};
 use crate::config::Config;
 use crate::draft::Draft;
@@ -146,6 +147,9 @@ fn handle(state: &State, line: &str) -> String {
             }
             "ok".into()
         }
+        // The MCP server asks before a tool with confirm = true. The answer
+        // waits for the A or B button.
+        "approve" => approvals::ask(argument, || state.chat.refresh()),
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),
@@ -175,6 +179,9 @@ fn act(state: &State, button: &str) -> String {
     };
     eprintln!("{button}: {action:?}");
     match action {
+        // A question about a tool waits: A says yes, B says no.
+        Action::FinishDictation { .. } if approvals::answer(true) => "ok".into(),
+        Action::EraseDictation { .. } if approvals::answer(false) => "ok".into(),
         Action::Dictate if state.draft.active() => {
             state.draft.button();
             "ok".into()

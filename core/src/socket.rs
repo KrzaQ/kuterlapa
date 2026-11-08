@@ -12,8 +12,14 @@ use std::time::Duration;
 
 /// Sends one line and returns the answer.
 pub fn request(path: &Path, line: &str) -> Result<String> {
+    request_waiting(path, line, Duration::from_secs(30))
+}
+
+/// Like `request`, for a request whose answer may take long, such as a
+/// question to the user.
+pub fn request_waiting(path: &Path, line: &str, wait: Duration) -> Result<String> {
     let mut stream = UnixStream::connect(path).with_context(|| format!("connecting to {}", path.display()))?;
-    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+    stream.set_read_timeout(Some(wait))?;
     stream.write_all(line.replace('\n', " ").as_bytes())?;
     stream.write_all(b"\n")?;
     let mut answer = String::new();
