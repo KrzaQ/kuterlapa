@@ -10,6 +10,7 @@ line per connection:
     cancel   stop recording and drop the pieces not typed yet
     finish   stop recording and answer once the last piece is sent:
              "stopped", or "idle" if it was not recording
+    status   "recording" or "idle"
 
 While recording, it cuts the audio at pauses in speech. Each piece goes to
 Whisper at once, and the text goes to the Kuterlapa core
@@ -203,6 +204,11 @@ def serve(dictation):
     while True:
         conn, _ = srv.accept()
         cmd = conn.recv(256).decode().strip()
+        if cmd == "status":
+            with conn:
+                state = "recording" if dictation.stream is not None else "idle"
+                conn.sendall(f"{state}\n".encode())
+            continue
         if cmd == "finish":
             # Answered only when done; its own thread, so other requests
             # (and the pieces still on their way) are not blocked.
