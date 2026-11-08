@@ -70,8 +70,10 @@ install: build ## Install the app, the CLI, the speech and voice providers and e
 run: ## Start the installed app, logging to LOG_FILE (default ~/Library/Logs/Kuterlapa.log)
 	open --stdout $(LOG_FILE) --stderr $(LOG_FILE) $(APP_DIR)/Kuterlapa.app
 
-stop: ## Quit the app (the core and the speech provider stop with it)
+stop: ## Quit the app and wait until it is gone (the core and the providers stop with it)
 	osascript -e 'quit app "Kuterlapa"'
+	@for i in $$(seq 1 50); do pgrep -qf 'Kuterlapa.app/Contents/MacOS' || exit 0; sleep 0.2; done; \
+		echo "Kuterlapa did not quit in 10 s" >&2; exit 1
 
 logs: ## Follow the app log
 	tail -f $(LOG_FILE)
