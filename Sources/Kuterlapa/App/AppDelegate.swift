@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Paths.ensureDirectories()
         log("Kuterlapa started")
+        ShellCommands.overlay = OverlayPanel()
         log("accessibility: \(Keystrokes.requestPermission())")
         shell.start()
         core.start()
