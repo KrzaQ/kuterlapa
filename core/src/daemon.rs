@@ -4,6 +4,7 @@ use crate::chat::{Chat, Mode};
 use crate::config::Config;
 use crate::draft::Draft;
 use crate::gestures::Recognizer;
+use crate::hooks::{self, Flag};
 use crate::mapping::{Action, Mapping};
 use crate::profiles::Current;
 use crate::store::Store;
@@ -30,6 +31,7 @@ struct State {
 pub fn run(config: Config) -> Result<()> {
     exit_when_stdin_closes();
     extend_path();
+    hooks::start(config.hooks.commands);
     speech::supervise(config.speech.command);
     voice::supervise(config.voice.command);
     let store = Arc::new(Store::open()?);
@@ -133,6 +135,17 @@ fn handle(state: &State, line: &str) -> String {
             }
             answer
         }
+        // A provider reports its state: "state listening on",
+        // "state speaking off".
+        "state" => {
+            let (name, value) = argument.split_once(' ').unwrap_or((argument, ""));
+            match (Flag::from_name(name), value) {
+                (Some(flag), "on") => hooks::set(flag, true),
+                (Some(flag), "off") => hooks::set(flag, false),
+                _ => return format!("error: bad state {argument:?}"),
+            }
+            "ok".into()
+        }
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),
@@ -222,7 +235,10 @@ fn act(state: &State, button: &str) -> String {
             state.chat.new_conversation();
             "ok".into()
         }
-        Action::VoiceStop => voice::send("stop"),
+        Action::VoiceStop => {
+            hooks::event("silence");
+            voice::send("stop")
+        }
         Action::EraseDictation { .. } if state.draft.active() => {
             state.draft.discard();
             "ok".into()

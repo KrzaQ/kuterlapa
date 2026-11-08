@@ -1,6 +1,7 @@
 //! Providers: helper programs that the core runs as children (speech
 //! recognition, the voice). The core starts a provider again when it stops.
 
+use crate::hooks::{self, Flag};
 use crate::paths;
 use crate::socket;
 use std::path::Path;
@@ -30,6 +31,12 @@ pub fn supervise(name: &'static str, command: Vec<String>) {
                 let _stdin = child.stdin.take();
                 let status = child.wait();
                 eprintln!("{name}: provider exited: {status:?}");
+                // A provider that died cannot report that it stopped.
+                match name {
+                    "speech" => hooks::set(Flag::Listening, false),
+                    "voice" => hooks::set(Flag::Speaking, false),
+                    _ => {}
+                }
             }
             Err(e) => eprintln!("{name}: cannot start {}: {e}", program.display()),
         }

@@ -10,3 +10,10 @@ command = ["~/.local/bin/kuterlapa-speech"]
 # The voice provider, which reads text aloud: any program that implements
 # the voice protocol. An empty list disables the voice.
 command = ["~/.local/bin/kuterlapa-voice"]
+
+[hooks]
+# Programs to run when Kuterlapa starts or stops listening, thinking or
+# speaking, and when the user asks for silence (voice-stop). Each runs with
+# the event as its argument and the whole state in the environment; see
+# core/src/hooks.rs. Example: pause the TV while Kuterlapa listens.
+commands = []

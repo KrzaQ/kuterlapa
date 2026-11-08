@@ -17,6 +17,7 @@
 //! While a command's answer is on screen, the next command continues it
 //! as a thread. Closing the answer, or a long pause, starts a new thread.
 
+use crate::hooks::{self, Flag};
 use crate::profiles::Current;
 use crate::sessions;
 use crate::store::{Message, Store};
@@ -187,6 +188,7 @@ impl Chat {
             (s.mode, question, s.thread)
         };
         self.show();
+        hooks::set(Flag::Thinking, true);
         let result = self.ask(mode, &question, thread);
         let speak = {
             let mut s = self.state.lock().unwrap();
@@ -209,6 +211,9 @@ impl Chat {
         if let Some(answer) = speak {
             voice::send(&format!("say {}", for_speech(&answer)));
         }
+        // After "say": the voice provider reports speaking before this
+        // late stop event runs, so hooks see no quiet gap in between.
+        hooks::set(Flag::Thinking, false);
     }
 
     /// Asks the current model. Returns the answer and, for a command, its

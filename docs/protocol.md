@@ -25,6 +25,7 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `release <name>` | shell | The button went up. The core turns presses and releases into gestures: a single press, a double press (`X double` in mapping.json) or a hold (`Y hold`). |
 | `button <key>` | CLI | Run the action for a key directly, without gestures: `button A`, `button X double`. |
 | `dictate <text>` | speech provider | Type the text, and remember it as dictation so that `erase-dictation` can remove it. |
+| `state <what> on\|off` | providers | The speech provider reports `listening`, the voice provider `speaking`. The core runs its hooks (config.toml `[hooks]`, see `core/src/hooks.rs`). |
 | `speech <request>` | CLI | Pass the request to the speech provider. |
 | `say <text>` | CLI | Read the text aloud with the voice provider. |
 | `voice <request>` | CLI | Pass the request (`stop`, `status`) to the voice provider. |
@@ -59,7 +60,8 @@ one key, joined with `+`. Key names: letters, digits, `Return`, `Tab`,
 | `finish` | Stop recording and answer only after the last text is sent: `stopped`, or `idle` if there was no recording. |
 
 The provider sends recognized text to the core as `dictate <text>`, piece
-by piece, while the user speaks.
+by piece, while the user speaks. It sends `state listening on` when
+recording starts and `state listening off` when it stops.
 
 ## Voice provider: `voice.sock`
 
@@ -71,6 +73,9 @@ Reads text aloud. Default: `kuterlapa-voice`, with the backends `say`,
 | `say <text>` | Read the text aloud, after anything still being read. Answers at once. |
 | `stop` | Stop reading and drop what is waiting. |
 | `status` | `speaking` or `idle`. |
+
+The provider sends `state speaking on` to the core when it starts to read,
+and `state speaking off` when nothing is left to read.
 
 ## Process lifetime
 

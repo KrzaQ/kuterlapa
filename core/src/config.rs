@@ -8,6 +8,11 @@
 //!   [voice]
 //!   # The voice provider, which reads text aloud. Empty disables it.
 //!   command = ["~/.local/bin/kuterlapa-voice"]
+//!
+//!   [hooks]
+//!   # Programs to run when Kuterlapa starts or stops listening, thinking
+//!   # or speaking (see hooks.rs). Empty: none.
+//!   commands = []
 
 use crate::paths;
 use anyhow::{Context, Result};
@@ -19,6 +24,13 @@ use std::fs;
 pub struct Config {
     pub speech: Speech,
     pub voice: Voice,
+    pub hooks: Hooks,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hooks {
+    pub commands: Vec<String>,
 }
 
 /// The voice provider, which reads text aloud. Empty disables the voice.
