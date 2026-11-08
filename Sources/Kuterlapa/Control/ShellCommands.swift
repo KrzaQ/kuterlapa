@@ -12,8 +12,8 @@ import AppKit
 ///   frontmost      the bundle identifier of the application in front
 ///   status         one line with the app state
 ///
-/// For the model's computer tools (Computer.swift); points are screen
-/// coordinates from the top left:
+/// For the model's computer tools (Computer.swift); coordinates are the
+/// model's (screen points scaled to at most 1024 wide), from the top left:
 ///   screen                    screenshot; answers "<path> <width> <height>"
 ///   ui                        elements of the window in front; answers a path
 ///   press <n>                 press element n from the last ui list
@@ -85,11 +85,11 @@ enum ShellCommands {
             guard words.count >= 2, let x = Double(words[0]), let y = Double(words[1]) else {
                 return "error: usage: click <x> <y> [click|double-click|right-click]"
             }
-            return Computer.click(at: CGPoint(x: x, y: y), how: words.count > 2 ? words[2] : "click")
+            return Computer.click(at: Computer.point(x, y), how: words.count > 2 ? words[2] : "click")
         case "scroll":
             let n = argument.split(separator: " ").compactMap { Double($0) }
             guard n.count == 4 else { return "error: usage: scroll <x> <y> <dx> <dy>" }
-            return Computer.scroll(at: CGPoint(x: n[0], y: n[1]), dx: Int32(n[2]), dy: Int32(n[3]))
+            return Computer.scroll(at: Computer.point(n[0], n[1]), dx: Int32(n[2]), dy: Int32(n[3]))
         case "erase":
             guard let count = Int(argument), count >= 0, let backspace = KeyCombo("Backspace") else {
                 return "error: bad count \(argument)"

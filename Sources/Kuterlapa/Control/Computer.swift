@@ -5,10 +5,24 @@ import ApplicationServices
 /// the window in front, clicks and keys. The core's MCP server calls these
 /// through the shell socket (requests "screen", "ui", "press", ...).
 ///
-/// Coordinates are screen points with the origin in the top left corner of
-/// the main display, the same as CGEvent. Screenshots are scaled to points,
-/// so a pixel in a screenshot is a point on the screen.
+/// The model sees one coordinate space, with the origin in the top left
+/// corner of the main display: screen points times `scale`, so the screen
+/// is at most `modelWidth` wide. Screenshots have that size, element
+/// positions use it, and clicks and scrolls come in it. A smaller picture
+/// costs the model less time.
 enum Computer {
+    static let modelWidth: CGFloat = 1024
+
+    static var scale: CGFloat {
+        let width = NSScreen.main?.frame.width ?? modelWidth
+        return min(1, modelWidth / width)
+    }
+
+    /// From the model's coordinates to screen points.
+    static func point(_ x: Double, _ y: Double) -> CGPoint {
+        CGPoint(x: CGFloat(x) / scale, y: CGFloat(y) / scale)
+    }
+
     /// Elements from the last "ui" request, by number, for "press".
     private static var elements: [Int: AXUIElement] = [:]
 
@@ -20,8 +34,8 @@ enum Computer {
 
     // MARK: Seeing
 
-    /// Captures the main display, scaled to points, as JPEG. Returns
-    /// "<path> <width> <height>".
+    /// Captures the main display in the model's coordinates, as JPEG.
+    /// Returns "<path> <width> <height>".
     static func screenshot() -> String {
         let raw = folder.appendingPathComponent("screen-raw.png")
         let out = folder.appendingPathComponent("screen.jpg")
@@ -41,7 +55,7 @@ enum Computer {
             return "error: no screenshot (does Kuterlapa have the Screen Recording permission?)"
         }
         let size = NSScreen.main?.frame.size ?? CGSize(width: cg.width, height: cg.height)
-        let width = Int(size.width), height = Int(size.height)
+        let width = Int(size.width * scale), height = Int(size.height * scale)
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
@@ -100,8 +114,9 @@ enum Computer {
                 elements[count] = element
                 let name = role.dropFirst(2)
                 let shown = label.isEmpty ? "" : " \"\(label.prefix(120))\""
-                lines.append("[\(count)] \(name)\(shown) at \(Int(frame.midX)),\(Int(frame.midY)) "
-                             + "size \(Int(frame.width))x\(Int(frame.height))")
+                let k = scale
+                lines.append("[\(count)] \(name)\(shown) at \(Int(frame.midX * k)),\(Int(frame.midY * k)) "
+                             + "size \(Int(frame.width * k))x\(Int(frame.height * k))")
             }
         }
         let children: [AXUIElement] = attribute(element, kAXChildrenAttribute) ?? []
