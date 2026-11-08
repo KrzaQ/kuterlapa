@@ -28,6 +28,7 @@ mod help;
 mod hooks;
 mod mapping;
 mod mcp;
+mod memory;
 mod paths;
 mod profiles;
 mod provider;

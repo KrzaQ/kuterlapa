@@ -18,6 +18,7 @@
 //! as a thread. Closing the answer, or a long pause, starts a new thread.
 
 use crate::hooks::{self, Flag};
+use crate::memory;
 use crate::profiles::Current;
 use crate::sessions;
 use crate::store::{Message, Store};
@@ -524,6 +525,7 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
     if !session.context.trim().is_empty() {
         p.push_str(&format!("\n\nKontekst sesji „{}”:\n{}", session.name, session.context.trim()));
     }
+    p.push_str(&memory::prompt(&session.name));
     p
 }
 

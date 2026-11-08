@@ -106,6 +106,9 @@ pub fn text(mapping: &mut Mapping) -> String {
          - Gdy narzędzie pyta o zgodę, w okienku są duże przyciski: A to tak, B to nie.\n\
          - B w trakcie myślenia modelu przerywa go razem z narzędziami.\n\
          - Nazwa profilu modelu (Opus, Qwen) jest w tytule okienka.\n\
+         - Pamięć: model zapisuje sobie notatki (np. jak dojść do WhatsAppa) i korzysta z nich następnym \
+         razem; globalne dotyczą komputera i użytkownika, notatki sesji jej tematu. Można powiedzieć \
+         „zapamiętaj”, „zapomnij” albo „przenieś do globalnych”.\n\
          - Większy albo mniejszy tekst: poproś model (narzędzie computer_zoom), w aplikacji na wierzchu \
          albo w okienku Kuterłapy.\n",
     );

@@ -10,6 +10,7 @@
 //! overlay and waits for A (yes) or B (no).
 
 use crate::computer;
+use crate::memory;
 use crate::help;
 use crate::mapping::Mapping;
 use crate::tools::{self, Tool};
@@ -55,6 +56,7 @@ pub fn run(args: &[String]) -> Result<()> {
             "tools/list" => {
                 let mut list: Vec<Value> = tools.iter().map(Tool::schema).collect();
                 list.extend(computer::schemas());
+                list.extend(memory_schemas());
                 list.push(json!({
                     "name": "kuterlapa_help",
                     "description": "How to use Kuterlapa, the app the user talks to you through: what each \
@@ -65,7 +67,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 }));
                 Ok(json!({ "tools": list }))
             }
-            "tools/call" => Ok(call(&tools, &params)),
+            "tools/call" => Ok(call(&tools, &params, session.as_deref().unwrap_or("general"))),
             other => Err((-32601, format!("unknown method {other}"))),
         };
         reply(&mut stdout, id, result)?;
@@ -83,10 +85,18 @@ fn reply(out: &mut impl Write, id: Value, result: Result<Value, (i64, String)>) 
     Ok(())
 }
 
-fn call(tools: &[Tool], params: &Value) -> Value {
+fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let empty = Map::new();
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);
+    if name.starts_with("memory_") {
+        eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
+        let (text, ok) = match memory_call(name, arguments, session) {
+            Ok(text) => (text, true),
+            Err(e) => (format!("error: {e:#}"), false),
+        };
+        return result(text, ok);
+    }
     if name == "kuterlapa_help" {
         let text = help::text(&mut Mapping::new());
         return json!({ "content": [{ "type": "text", "text": text }], "isError": false });
@@ -117,4 +127,71 @@ fn call(tools: &[Tool], params: &Value) -> Value {
 
 fn result(text: String, ok: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": !ok })
+}
+
+fn memory_schemas() -> Vec<Value> {
+    let scope = json!({ "type": "string", "enum": ["global", "session"],
+        "description": "global: about the computer, apps, websites and the user; session: about this session's topic" });
+    vec![
+        json!({
+            "name": "memory_read",
+            "description": "Read a whole note from your memory by its name (the system prompt lists the notes).",
+            "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
+        }),
+        json!({
+            "name": "memory_write",
+            "description": "Save a note for later, or replace the note with the same name: for example how to do a \
+                            task on the computer that worked. Never store passwords, PINs, codes or card numbers.",
+            "inputSchema": { "type": "object", "properties": {
+                "scope": scope,
+                "name": { "type": "string", "description": "Short, for example whatsapp or chrome-gmail" },
+                "description": { "type": "string", "description": "One line: what the note is about" },
+                "text": { "type": "string", "description": "The note: exact steps, tools, addresses, profiles" },
+            }, "required": ["scope", "name", "description", "text"] },
+        }),
+        json!({
+            "name": "memory_forget",
+            "description": "Delete a note, when the user asks or it turned out wrong.",
+            "inputSchema": { "type": "object", "properties": {
+                "name": { "type": "string" }, "scope": scope,
+            }, "required": ["name"] },
+        }),
+        json!({
+            "name": "memory_move",
+            "description": "Move a note between global memory and this session's memory.",
+            "inputSchema": { "type": "object", "properties": {
+                "name": { "type": "string" }, "to": scope,
+            }, "required": ["name", "to"] },
+        }),
+    ]
+}
+
+fn memory_call(name: &str, args: &Map<String, Value>, session: &str) -> anyhow::Result<String> {
+    let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default();
+    let scope = |key: &str| memory::Scope::parse(text(key));
+    let place = |s: memory::Scope| match s {
+        memory::Scope::Global => "global memory".to_string(),
+        memory::Scope::Session => format!("the memory of session {session}"),
+    };
+    match name {
+        "memory_read" => {
+            let note = memory::read(session, text("name"))?;
+            Ok(format!("{} ({}): {}\n\n{}", note.name, place(note.scope), note.description, note.text))
+        }
+        "memory_write" => {
+            let s = scope("scope").ok_or_else(|| anyhow::anyhow!("scope must be global or session"))?;
+            let saved = memory::write(session, s, text("name"), text("description"), text("text"))?;
+            Ok(format!("Saved note {saved} in {}.", place(s)))
+        }
+        "memory_forget" => {
+            let s = memory::forget(session, text("name"), scope("scope"))?;
+            Ok(format!("Deleted note {} from {}.", text("name"), place(s)))
+        }
+        "memory_move" => {
+            let to = scope("to").ok_or_else(|| anyhow::anyhow!("to must be global or session"))?;
+            memory::move_to(session, text("name"), to)?;
+            Ok(format!("Moved note {} to {}.", text("name"), place(to)))
+        }
+        other => anyhow::bail!("no tool {other}"),
+    }
 }
