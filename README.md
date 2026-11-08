@@ -69,14 +69,21 @@ stable identity: see `Makefile.local.example`.
 
 All in `~/.config/kuterlapa/`:
 
-- `config.toml`: which speech provider the core starts.
+- `config.toml`: which speech and voice providers the core starts.
+- `profiles.json`: model profiles (engine, model, effort) that L and ZL
+  switch between.
+- `sessions/<name>/`: a session's `context.md` (what the model should
+  know) and `session.toml` (`folder`: the project folder the model runs in).
+- History of conversations and one-off commands:
+  `~/.local/share/kuterlapa/kuterlapa.db` (SQLite).
 - `mapping.json`: button → action. A button can also have a double press
   (`"X double"`) and a hold (`"Y hold"`); only buttons that have them wait
   to tell the gestures apart. `"LeftStick"` and `"RightStick"` take
   `"scroll"`, `"scroll-inverted"` or `"mouse"`. Use `"scroll-inverted"`
   when a tool such as Scroll Reverser flips mouse wheel events: it takes
   the stick for a mouse. An action is `"dictate"`, `"draft"`,
-  `"next-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
+  `"chat"`, `"command"`, `"voice-toggle"`, `"recall"`, `"next-profile"`,
+  `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation, or press Escape),
   `"finish-dictation|Return"` (end the dictation, wait for its last words,
