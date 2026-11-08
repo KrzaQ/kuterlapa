@@ -60,6 +60,8 @@ pub fn run(config: Config) -> Result<()> {
     }));
     state.mapping.lock().unwrap().reload_if_changed();
     send_sticks(&state);
+    // The overlay keeps the size the user asked for (computer_zoom).
+    shell::send(&format!("overlay-scale {}", crate::computer::overlay_scale()));
     socket::serve(&paths::core_socket(), move |line| handle(&state, line))
 }
 

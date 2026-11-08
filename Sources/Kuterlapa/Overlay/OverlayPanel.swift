@@ -18,9 +18,13 @@ final class OverlayPanel {
     private let helpView = NSStackView()
     private var background: NSVisualEffectView!
     private var widthConstraint: NSLayoutConstraint!
-    private let width: CGFloat = 440
+    /// The size of everything in the panel; the user changes it with the
+    /// controller (overlay-bigger, overlay-smaller in the core).
+    private var scale: CGFloat = 1
+    private var lastState: [String: Any]?
+    private var width: CGFloat { 440 * scale }
     /// The help needs room for two columns.
-    private let helpWidth: CGFloat = 640
+    private var helpWidth: CGFloat { 640 * scale }
     private let margin: CGFloat = 12
 
     init() {
@@ -74,6 +78,26 @@ final class OverlayPanel {
         countdownBar.isHidden = true
         setWidth(width)
         panel.contentView = background
+        applyFonts()
+    }
+
+    /// Changes the size of the panel and its text, and redraws it.
+    func setScale(_ value: CGFloat) {
+        scale = min(max(value, 0.6), 3)
+        applyFonts()
+        if let state = lastState {
+            update(state)
+        }
+    }
+
+    private func applyFonts() {
+        let fonts: [(NSTextField, CGFloat, NSFont.Weight)] = [
+            (titleLabel, 12, .semibold), (statusLabel, 12, .regular), (headingLabel, 22, .bold),
+            (textLabel, 15, .regular), (hintLabel, 11, .regular), (detailLabel, 12, .regular),
+        ]
+        for (label, size, weight) in fonts {
+            label.font = .systemFont(ofSize: size * scale, weight: weight)
+        }
     }
 
     /// Shows or hides the panel. `state` comes from the core as JSON:
@@ -90,6 +114,7 @@ final class OverlayPanel {
     /// While the user pauses in a chat message, a bar shrinks until the
     /// message sends itself: "countdown": {"ends": <Unix time>, "total": <s>}.
     func update(_ state: [String: Any]) {
+        lastState = state
         guard state["visible"] as? Bool == true else {
             panel.orderOut(nil)
             return
@@ -99,7 +124,7 @@ final class OverlayPanel {
         set(headingLabel, state["heading"])
         // Answers from a model are Markdown.
         let text = state["text"] as? String ?? ""
-        textLabel.attributedStringValue = Markdown.render(text, size: 15, color: .labelColor)
+        textLabel.attributedStringValue = Markdown.render(text, size: 15 * scale, color: .labelColor)
         textLabel.isHidden = text.isEmpty
         set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
@@ -165,7 +190,7 @@ final class OverlayPanel {
             column.alignment = .leading
             column.spacing = 5
             for group in part {
-                let title = OverlayPanel.label(size: 11, weight: .bold, color: .systemOrange)
+                let title = OverlayPanel.label(size: 11 * scale, weight: .bold, color: .systemOrange)
                 title.stringValue = (group["title"] as? String ?? "").uppercased()
                 if column.arrangedSubviews.count > 0 {
                     column.setCustomSpacing(14, after: column.arrangedSubviews.last!)
@@ -175,7 +200,7 @@ final class OverlayPanel {
                 for row in group["rows"] as? [[String: Any]] ?? [] {
                     column.addArrangedSubview(OverlayPanel.helpRow(keys: row["keys"] as? String ?? "",
                                                                    text: row["text"] as? String ?? "",
-                                                                   width: columnWidth))
+                                                                   width: columnWidth, scale: scale))
                 }
             }
             column.widthAnchor.constraint(equalToConstant: columnWidth).isActive = true
@@ -184,18 +209,18 @@ final class OverlayPanel {
     }
 
     /// One help row: the keys as small key caps, then what they do.
-    private static func helpRow(keys: String, text: String, width: CGFloat) -> NSView {
+    private static func helpRow(keys: String, text: String, width: CGFloat, scale: CGFloat) -> NSView {
         let caps = NSStackView()
         caps.orientation = .horizontal
         caps.spacing = 4
         for key in keys.components(separatedBy: " · ") {
-            caps.addArrangedSubview(keyCap(key))
+            caps.addArrangedSubview(keyCap(key, scale: scale))
         }
-        let keyColumn: CGFloat = 126
+        let keyColumn: CGFloat = 126 * scale
         caps.widthAnchor.constraint(equalToConstant: keyColumn).isActive = true
         caps.setHuggingPriority(.required, for: .horizontal)
         caps.addArrangedSubview(NSView())  // pushes the caps to the left
-        let label = OverlayPanel.label(size: 14, weight: .regular, color: .labelColor)
+        let label = OverlayPanel.label(size: 14 * scale, weight: .regular, color: .labelColor)
         label.stringValue = text
         label.preferredMaxLayoutWidth = width - keyColumn - 10
         let row = NSStackView(views: [caps, label])
@@ -206,9 +231,9 @@ final class OverlayPanel {
     }
 
     /// A key cap: "X", "Y ×2" or "lewa gałka" on a light, rounded plate.
-    private static func keyCap(_ text: String) -> NSView {
+    private static func keyCap(_ text: String, scale: CGFloat) -> NSView {
         let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.font = .systemFont(ofSize: 12 * scale, weight: .semibold)
         label.textColor = .labelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         let plate = NSView()
@@ -223,7 +248,7 @@ final class OverlayPanel {
             label.trailingAnchor.constraint(equalTo: plate.trailingAnchor, constant: -7),
             label.topAnchor.constraint(equalTo: plate.topAnchor, constant: 2),
             label.bottomAnchor.constraint(equalTo: plate.bottomAnchor, constant: -2),
-            plate.widthAnchor.constraint(greaterThanOrEqualToConstant: 26),
+            plate.widthAnchor.constraint(greaterThanOrEqualToConstant: 26 * scale),
         ])
         label.alignment = .center
         return plate
@@ -237,14 +262,15 @@ final class OverlayPanel {
         for button in buttons {
             let key = button["key"] as? String ?? ""
             let label = button["label"] as? String ?? ""
-            buttonRow.addArrangedSubview(OverlayPanel.button("\(key) · \(label)", tone: button["tone"] as? String))
+            buttonRow.addArrangedSubview(OverlayPanel.button("\(key) · \(label)", tone: button["tone"] as? String,
+                                                              scale: scale))
         }
         buttonRow.isHidden = buttons.isEmpty
     }
 
     /// A large, calm button that shows which controller button to press.
     /// It is a picture, not a control: the panel ignores the mouse.
-    private static func button(_ text: String, tone: String?) -> NSView {
+    private static func button(_ text: String, tone: String?, scale: CGFloat) -> NSView {
         let color: NSColor
         switch tone {
         case "yes": color = NSColor(calibratedRed: 0.24, green: 0.55, blue: 0.36, alpha: 0.85)
@@ -256,13 +282,13 @@ final class OverlayPanel {
         box.layer?.backgroundColor = color.cgColor
         box.layer?.cornerRadius = 10
         let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 20, weight: .semibold)
+        label.font = .systemFont(ofSize: 20 * scale, weight: .semibold)
         label.textColor = .white
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(label)
         NSLayoutConstraint.activate([
-            box.heightAnchor.constraint(equalToConstant: 52),
+            box.heightAnchor.constraint(equalToConstant: 52 * scale),
             label.centerXAnchor.constraint(equalTo: box.centerXAnchor),
             label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
         ])

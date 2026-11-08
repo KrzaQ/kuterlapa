@@ -8,7 +8,7 @@
 //! `computer_do` runs several actions in one call, and `computer_find`
 //! lists only the elements that match a text.
 
-use crate::shell;
+use crate::{paths, shell};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::thread;
@@ -84,6 +84,16 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ),
     ("computer_apps", "List the running applications; the one in front is marked with *.", r#"{}"#),
     (
+        "computer_zoom",
+        "Make text bigger or smaller, for a user who sits far from the screen. target \"app\": the \
+         application in front (cmd+= / cmd+-; reset: cmd+0), which works in most Mac apps such as \
+         Chrome, iTerm or Claude. target \"overlay\": Kuterlapa's own panel in the corner; its size is \
+         remembered.",
+        r#"{"target": {"type": "string", "enum": ["app", "overlay"]},
+            "direction": {"type": "string", "enum": ["in", "out", "reset"]},
+            "steps": {"type": "integer", "description": "How many steps, default 1"}}"#,
+    ),
+    (
         "computer_windows",
         "List the windows of all applications, numbered, with the virtual desktop each is on, and \
          the number of the current desktop. Use it to find where a window is.",
@@ -108,7 +118,7 @@ const TOOLS: &[(&str, &str, &str)] = &[
 ];
 
 /// Keys that a tool does not require.
-const OPTIONAL: &[&str] = &["how", "amount"];
+const OPTIONAL: &[&str] = &["how", "amount", "steps"];
 
 /// The tool descriptions for MCP tools/list.
 pub fn schemas() -> Vec<Value> {
@@ -142,6 +152,7 @@ pub fn call(name: &str, args: &Map<String, Value>) -> (Vec<Value>, bool) {
         "computer_apps" => Ok(shell::send("apps").replace(" | ", "\n")),
         "computer_windows" => checked(shell::send("windows")).map(|l| l.replace(" | ", "\n")),
         "computer_do" => run_steps(args),
+        "computer_zoom" => zoom(args),
         other => match other.strip_prefix("computer_") {
             Some(action) => act(action, args).and_then(|_| after()),
             None => Err(format!("no tool {other}")),
@@ -237,6 +248,52 @@ fn ui(filter: Option<&str>) -> Result<String, String> {
         return Ok(format!("{}\n(no element contains {filter:?})", lines.join("\n")));
     }
     Ok(lines.join("\n"))
+}
+
+/// One step of the overlay's size.
+const OVERLAY_STEP: f64 = 1.15;
+
+fn zoom(args: &Map<String, Value>) -> Result<String, String> {
+    let steps = args.get("steps").and_then(Value::as_u64).unwrap_or(1).clamp(1, 10);
+    let direction = text(args, "direction");
+    match text(args, "target").as_str() {
+        "app" => {
+            let combo = match direction.as_str() {
+                "in" => "cmd+=",
+                "out" => "cmd+-",
+                "reset" => "cmd+0",
+                other => return Err(format!("bad direction {other:?}")),
+            };
+            let times = if direction == "reset" { 1 } else { steps };
+            for _ in 0..times {
+                checked(shell::key(combo))?;
+                thread::sleep(Duration::from_millis(60));
+            }
+            Ok(format!("pressed {combo} {times}×"))
+        }
+        "overlay" => {
+            let now = overlay_scale();
+            let scale = match direction.as_str() {
+                "in" => now * OVERLAY_STEP.powi(steps as i32),
+                "out" => now / OVERLAY_STEP.powi(steps as i32),
+                "reset" => 1.0,
+                other => return Err(format!("bad direction {other:?}")),
+            }
+            .clamp(0.6, 3.0);
+            fs::write(paths::state_dir().join("overlay-scale"), format!("{scale:.3}\n")).map_err(|e| e.to_string())?;
+            checked(shell::send(&format!("overlay-scale {scale:.3}")))?;
+            Ok(format!("overlay size {:.0}%", scale * 100.0))
+        }
+        other => Err(format!("bad target {other:?}")),
+    }
+}
+
+/// The overlay's size from the state folder; 1 when not set.
+pub fn overlay_scale() -> f64 {
+    fs::read_to_string(paths::state_dir().join("overlay-scale"))
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1.0)
 }
 
 fn checked(answer: String) -> Result<String, String> {

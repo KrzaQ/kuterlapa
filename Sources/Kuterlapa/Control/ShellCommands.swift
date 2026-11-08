@@ -7,6 +7,7 @@ import AppKit
 ///   key <combo>    press a key combination, for example "key Return"
 ///   erase <n>      press Backspace n times
 ///   overlay <json> show the overlay with this state, or hide it
+///   overlay-scale <f> the size of the overlay and its text (1 is normal)
 ///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
 ///   mouse <what>   click, double-click or right-click at the pointer
 ///   frontmost      the bundle identifier of the application in front
@@ -54,6 +55,10 @@ enum ShellCommands {
             return Computer.activate(argument)
         case "windows":
             return Desktops.list()
+        case "overlay-scale":
+            guard let value = Double(argument) else { return "error: bad scale \(argument)" }
+            overlay?.setScale(CGFloat(value))
+            return "ok"
         case "sticks":
             guard let data = argument.data(using: .utf8),
                   let roles = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
