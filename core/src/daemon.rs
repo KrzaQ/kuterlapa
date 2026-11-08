@@ -2,6 +2,7 @@
 
 use crate::approvals;
 use crate::chat::{Chat, Mode};
+use crate::help;
 use crate::config::Config;
 use crate::draft::Draft;
 use crate::gestures::Recognizer;
@@ -27,6 +28,9 @@ struct State {
     chat: Arc<Chat>,
     profiles: Arc<Current>,
     gestures: OnceLock<Arc<Recognizer>>,
+    /// While the help shows: its number, so an old timer does not hide a
+    /// newer help.
+    help: Mutex<Option<u64>>,
 }
 
 pub fn run(config: Config) -> Result<()> {
@@ -44,6 +48,7 @@ pub fn run(config: Config) -> Result<()> {
         chat: Arc::new(Chat::new(Arc::clone(&profiles), store)),
         profiles,
         gestures: OnceLock::new(),
+        help: Mutex::new(None),
     });
     let for_gestures = Arc::clone(&state);
     let _ = state.gestures.set(Recognizer::new(move |button, gesture| {
@@ -98,7 +103,7 @@ fn extend_path() {
 // provider sends "dictate" requests back while it finishes, and those need
 // the dictation buffer.
 
-fn handle(state: &State, line: &str) -> String {
+fn handle(state: &Arc<State>, line: &str) -> String {
     let (verb, argument) = line.split_once(' ').unwrap_or((line, ""));
     match verb {
         // A whole press, without gestures (the CLI uses it: `kuterlapa
@@ -190,7 +195,7 @@ fn forget_dictation(state: &State) {
 }
 
 /// Runs the action for a key such as "X" or "X double".
-fn act(state: &State, button: &str) -> String {
+fn act(state: &Arc<State>, button: &str) -> String {
     let action = state.mapping.lock().unwrap().action(button);
     let Some(action) = action else {
         eprintln!("{button}: no mapping");
@@ -201,6 +206,13 @@ fn act(state: &State, button: &str) -> String {
         // A question about a tool waits: A says yes, B says no.
         Action::FinishDictation { .. } if approvals::answer(true) => "ok".into(),
         Action::EraseDictation { .. } if approvals::answer(false) => "ok".into(),
+        Action::Help => {
+            if !hide_help(state) {
+                show_help(state);
+            }
+            "ok".into()
+        }
+        Action::EraseDictation { .. } if hide_help(state) => "ok".into(),
         Action::Dictate if state.draft.active() => {
             state.draft.button();
             "ok".into()
@@ -301,6 +313,38 @@ fn act(state: &State, button: &str) -> String {
             }
         }
     }
+}
+
+/// How long the help stays without a button.
+const HELP_TIME: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn show_help(state: &Arc<State>) {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let number = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    *state.help.lock().unwrap() = Some(number);
+    let overlay = help::overlay(&mut state.mapping.lock().unwrap());
+    shell::overlay(&overlay);
+    let state = Arc::clone(state);
+    thread::spawn(move || {
+        thread::sleep(HELP_TIME);
+        if *state.help.lock().unwrap() == Some(number) {
+            hide_help(&state);
+        }
+    });
+}
+
+/// Hides the help and shows what was there before. Returns false if the
+/// help was not showing.
+fn hide_help(state: &State) -> bool {
+    if state.help.lock().unwrap().take().is_none() {
+        return false;
+    }
+    if state.draft.active() {
+        state.draft.refresh();
+    } else {
+        state.chat.refresh();
+    }
+    true
 }
 
 fn run_command(command: &str) {

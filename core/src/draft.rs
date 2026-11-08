@@ -214,6 +214,11 @@ impl Draft {
 
     /// Show the overlay for the current state, or hide it when there is
     /// nothing to show.
+    /// Shows the draft again, for example after the help covered it.
+    pub fn refresh(&self) {
+        self.show();
+    }
+
     fn show(&self) {
         let profile = self.profile().name;
         let s = self.state.lock().unwrap();

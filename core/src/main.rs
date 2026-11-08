@@ -24,6 +24,7 @@ mod daemon;
 mod draft;
 mod engines;
 mod gestures;
+mod help;
 mod hooks;
 mod mapping;
 mod mcp;

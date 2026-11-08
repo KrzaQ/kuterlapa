@@ -19,5 +19,7 @@
   "ZL": "previous-profile",
   "+": "new-conversation",
   "-": "voice-stop",
-  "R": "click"
+  "R": "click",
+  "+ double": "help",
+  "Share double": "help"
 }

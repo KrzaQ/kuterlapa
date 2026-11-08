@@ -53,6 +53,8 @@ pub enum Action {
     NewConversation,
     /// Stop the narrator now, without changing the voice mode.
     VoiceStop,
+    /// Show what each button does, or hide it.
+    Help,
 }
 
 impl Action {
@@ -65,6 +67,7 @@ impl Action {
             "previous-profile" => return Some(Action::PreviousProfile),
             "new-conversation" => return Some(Action::NewConversation),
             "voice-stop" => return Some(Action::VoiceStop),
+            "help" => return Some(Action::Help),
             _ => {}
         }
         if spec == "draft" {
