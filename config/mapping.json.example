@@ -1,0 +1,9 @@
+{
+  "Y": "speech:toggle",
+  "A": "Return",
+  "B": "erase-dictation|Escape",
+  "Up": "PageUp",
+  "Down": "PageDown",
+  "Left": "ctrl+Left",
+  "Right": "ctrl+Right"
+}

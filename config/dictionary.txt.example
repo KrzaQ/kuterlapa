@@ -1,0 +1,12 @@
+# Words for Whisper's context. One word or phrase per line.
+# Whisper reads only about 200 tokens of context, so put the most
+# important words first: names of your projects, hosts and tools.
+
+Claude Code
+tmux
+SSH
+GitHub
+commit
+push
+pull request
+branch

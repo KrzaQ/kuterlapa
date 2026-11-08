@@ -1,0 +1,7 @@
+# Settings of the Kuterlapa core. Copy to ~/.config/kuterlapa/config.toml.
+# Every setting is optional; the values below are the defaults.
+
+[speech]
+# The speech provider: any program that implements the speech protocol
+# (docs/protocol.md). An empty list disables speech.
+command = ["~/.local/bin/kuterlapa-speech"]

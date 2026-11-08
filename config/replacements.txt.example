@@ -1,0 +1,5 @@
+# Fixes applied after speech recognition, one per line: "wrong => right".
+# Whole words, case-insensitive. Use them for words that Whisper keeps
+# getting wrong even with the dictionary.
+
+ti maks => tmux

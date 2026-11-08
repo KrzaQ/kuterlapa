@@ -1,0 +1,30 @@
+# Settings of kuterlapa-speech. Copy to ~/.config/kuterlapa/speech.toml.
+# Every setting is optional; the values below are the defaults.
+
+# Recognition backend: "mlx" (Apple Silicon Macs) or "faster-whisper"
+# (Linux, Windows; NVIDIA GPU or CPU). Empty: chosen for this computer.
+# Install the matching extra: kuterlapa-speech[mlx] or [faster-whisper].
+backend = ""
+
+# A model id or a local folder with a model for the backend. Empty: the
+# backend's default, Whisper large-v3-turbo.
+model = ""
+
+# Language of the speech (ISO 639-1 code).
+language = "pl"
+
+# First sentence of Whisper's context: the language and style of the speech.
+prompt_intro = "Rozmawiamy po polsku z angielskimi terminami IT."
+
+# Input device name; empty means the system default.
+microphone = ""
+
+# Word lists for Whisper's context, one word or phrase per line,
+# most important first. Whisper reads only about 200 tokens of context.
+dictionaries = ["~/.config/kuterlapa/dictionary.txt"]
+
+# Fixes applied after recognition, one "wrong => right" per line.
+replacements = "~/.config/kuterlapa/replacements.txt"
+
+# Where recordings and their text are saved.
+recordings = "~/.local/share/kuterlapa/recordings"
