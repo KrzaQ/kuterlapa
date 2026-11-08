@@ -21,7 +21,9 @@ An answer is `ok`, a status line, or `error: <message>`.
 
 | Request | From | Meaning |
 |---|---|---|
-| `button <name>` | shell | A controller button was pressed. Names: `A B X Y L R ZL ZR + - Share Up Down Left Right`. |
+| `press <name>` | shell | A controller button went down. Names: `A B X Y L R ZL ZR + - Share Up Down Left Right L3 R3`. |
+| `release <name>` | shell | The button went up. The core turns presses and releases into gestures: a single press, a double press (`X double` in mapping.json) or a hold (`Y hold`). |
+| `button <key>` | CLI | Run the action for a key directly, without gestures: `button A`, `button X double`. |
 | `dictate <text>` | speech provider | Type the text, and remember it as dictation so that `erase-dictation` can remove it. |
 | `speech <request>` | CLI | Pass the request to the speech provider. |
 | `say <text>` | CLI | Read the text aloud with the voice provider. |
@@ -37,6 +39,10 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `type <text>` | Type the text into the active window. |
 | `key <combo>` | Press a key combination, for example `Return` or `ctrl+Left`. |
 | `erase <n>` | Press Backspace `n` times. |
+| `mouse <what>` | `click`, `double-click` or `right-click` at the pointer. |
+| `sticks <json>` | What the analog sticks do, for example `{"leftstick": "scroll", "rightstick": "mouse"}`. The shell moves the pointer and scrolls by itself. |
+| `overlay <json>` | Show the overlay with this state, or hide it (`{"visible": false}`). |
+| `frontmost` | The identifier of the application in front (a bundle id on macOS). |
 | `status` | State of the shell, for example its permissions. |
 
 Key combinations: modifiers `cmd`, `ctrl`, `alt` (`option`), `shift`, and

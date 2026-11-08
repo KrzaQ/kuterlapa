@@ -1,11 +1,16 @@
 {
+  "X": "dictate",
+  "X double": "draft",
   "Y": "speech:toggle",
   "A": "finish-dictation|Return",
   "B": "erase-dictation|Escape",
+  "L": "next-profile",
+  "R3": "click",
+  "R3 hold": "double-click",
   "Up": "PageUp",
   "Down": "PageDown",
   "Left": "ctrl+Left",
   "Right": "ctrl+Right",
-  "X": "draft",
-  "L": "next-profile"
+  "LeftStick": "scroll",
+  "RightStick": "mouse"
 }

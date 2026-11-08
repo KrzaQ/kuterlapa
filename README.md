@@ -70,7 +70,11 @@ stable identity: see `Makefile.local.example`.
 All in `~/.config/kuterlapa/`:
 
 - `config.toml`: which speech provider the core starts.
-- `mapping.json`: button → action. An action is a key combination
+- `mapping.json`: button → action. A button can also have a double press
+  (`"X double"`) and a hold (`"Y hold"`); only buttons that have them wait
+  to tell the gestures apart. `"LeftStick"` and `"RightStick"` take
+  `"scroll"` or `"mouse"`. An action is `"dictate"`, `"draft"`,
+  `"next-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation, or press Escape),
   `"finish-dictation|Return"` (end the dictation, wait for its last words,
