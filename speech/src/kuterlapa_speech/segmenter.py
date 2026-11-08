@@ -35,6 +35,7 @@ class Segmenter:
         self.piece = []
         self.speech_frames = 0
         self.silence_frames = 0
+        self.last_was_speech = False
 
     def push(self, frame):
         """Add one frame. Return a finished piece, or None."""
@@ -42,6 +43,7 @@ class Segmenter:
         if self.floor is None:
             self.floor = level
         speech = level > max(self.floor + NOISE_MARGIN_DB, MIN_SPEECH_DBFS)
+        self.last_was_speech = speech
         if not speech:
             # Follow the floor down fast and up slowly.
             rate = 0.3 if level < self.floor else 0.02

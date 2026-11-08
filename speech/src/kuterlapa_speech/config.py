@@ -45,6 +45,13 @@ class Settings:
     # macOS stops showing its microphone indicator. 0 keeps it open. While
     # it is open, the first words before a button press are kept too.
     microphone_idle_close: float = 30.0
+    # A recording started with "start-auto" (a chat message) ends by itself
+    # after this much silence following speech. After `countdown_after`
+    # seconds of silence the core shows a countdown.
+    auto_finish: float = 3.0
+    countdown_after: float = 1.0
+    # ...but never before this many seconds from the start of the recording.
+    auto_finish_min: float = 10.0
     # Word lists for Whisper's context, most important first.
     dictionaries: list[str] = field(default_factory=lambda: [str(CONFIG / "dictionary.txt")])
     replacements: str = str(CONFIG / "replacements.txt")

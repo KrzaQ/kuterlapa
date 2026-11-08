@@ -7,6 +7,11 @@ memory and listens on ~/.local/state/kuterlapa/speech.sock. Requests, one
 line per connection:
 
     toggle   start recording, or stop it
+    start-auto
+             start recording that ends by itself after a pause (a chat
+             message); the core gets "countdown <seconds>" when the pause
+             begins, "countdown cancel" when speech returns, and
+             "auto-finish" when the pause is long enough
     cancel   stop recording and drop the pieces not typed yet
     finish   stop recording and answer once the last piece is sent:
              "stopped", or "idle" if it was not recording
@@ -74,6 +79,11 @@ def _send_states():
 threading.Thread(target=_send_states, daemon=True).start()
 
 
+def tell_core(line):
+    """Send a request to the core from the reporting thread, in order."""
+    _states.put(line)
+
+
 def report(listening):
     """Tell the core that recording started or stopped (it runs hooks).
 
@@ -87,6 +97,11 @@ PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
 
 
 CLOSE_TIMEOUT_S = 3.0
+
+# Auto-finish (start-auto): ignore this much audio at the start, where the
+# start sound plays, and count a pause only after this much speech.
+START_SOUND_S = 0.5
+ARM_SPEECH_S = 0.6
 
 
 class Dictation:
@@ -118,6 +133,7 @@ class Dictation:
         self.wav = None
         self.last_text = ""
         self.cancelled = False
+        self.auto = False
         self.workers = []
         self.stream = None
         self.last_used = time.monotonic()
@@ -163,9 +179,16 @@ class Dictation:
     def toggle(self):
         with self.lock:
             if not self.recording:
+                self.auto = False
                 self._start()
             else:
                 self._stop()
+
+    def start_auto(self):
+        with self.lock:
+            if not self.recording:
+                self.auto = True
+                self._start()
 
     def cancel(self):
         with self.lock:
@@ -229,10 +252,44 @@ class Dictation:
 
     def _segment(self):
         seg = Segmenter()
+        s = self.settings
+        frames_per_s = RATE / FRAME
+        # The pause counts only once the user has really spoken: the start
+        # sound and a click are short, and the first half second holds the
+        # start sound.
+        skip = int(START_SOUND_S * frames_per_s) + PRE_ROLL_FRAMES
+        speech = 0  # frames of speech so far
+        quiet = 0  # frames of silence since the last speech
+        counting = False
+        frame_number = 0
         while (frame := self.frames.get()) is not None:
             self.recorded.append(frame)
             if (piece := seg.push(frame)) is not None:
                 self.pieces.put(piece)
+            frame_number += 1
+            if not self.auto or frame_number <= skip:
+                continue
+            heard = speech >= ARM_SPEECH_S * frames_per_s
+            if seg.last_was_speech:
+                speech += 1
+                quiet = 0
+                if counting:
+                    counting = False
+                    tell_core("countdown cancel")
+            elif heard:
+                quiet += 1
+                elapsed = frame_number / frames_per_s
+                if not counting and quiet >= s.countdown_after * frames_per_s:
+                    counting = True
+                    # The countdown ends when both the pause is long enough
+                    # and the recording is old enough.
+                    left = max(s.auto_finish - s.countdown_after, s.auto_finish_min - elapsed)
+                    tell_core(f"countdown {left:.2f}")
+                if quiet >= s.auto_finish * frames_per_s and elapsed >= s.auto_finish_min:
+                    # The core finishes the message as if the user pressed
+                    # the button; that stops this recording.
+                    self.auto = False
+                    tell_core("auto-finish")
         if not self.cancelled and (piece := seg.cut()) is not None:
             self.pieces.put(piece)
         self.pieces.put(None)
@@ -314,6 +371,8 @@ def serve(dictation):
             conn.sendall(b"ok\n")
         if cmd == "toggle":
             threading.Thread(target=dictation.toggle, daemon=True).start()
+        elif cmd == "start-auto":
+            threading.Thread(target=dictation.start_auto, daemon=True).start()
         elif cmd == "cancel":
             threading.Thread(target=dictation.cancel, daemon=True).start()
         else:
