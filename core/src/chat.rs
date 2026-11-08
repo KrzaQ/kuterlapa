@@ -289,6 +289,29 @@ impl Chat {
         self.show();
     }
 
+    /// Start a new conversation in the current session. The next message
+    /// (Y) goes there, without the earlier history.
+    pub fn new_conversation(self: &Arc<Self>) {
+        let session = sessions::current_name();
+        if let Err(e) = self.store.new_conversation(&session) {
+            eprintln!("new conversation: {e:#}");
+            return;
+        }
+        voice::send("stop");
+        {
+            let mut s = self.state.lock().unwrap();
+            if s.recording || s.busy {
+                return;
+            }
+            s.question.clear();
+            s.answer.clear();
+            s.error = None;
+            s.thread = None;
+            s.mode = Mode::Conversation;
+        }
+        self.flash("Nowa rozmowa");
+    }
+
     pub fn toggle_voice(self: &Arc<Self>) {
         let mode = {
             let mut s = self.state.lock().unwrap();

@@ -218,6 +218,11 @@ fn act(state: &State, button: &str) -> String {
             state.chat.recall();
             "ok".into()
         }
+        Action::NewConversation => {
+            state.chat.new_conversation();
+            "ok".into()
+        }
+        Action::VoiceStop => voice::send("stop"),
         Action::EraseDictation { .. } if state.draft.active() => {
             state.draft.discard();
             "ok".into()

@@ -49,6 +49,10 @@ pub enum Action {
     VoiceToggle,
     /// Show the last answer again.
     Recall,
+    /// Start a new conversation in the current session.
+    NewConversation,
+    /// Stop the narrator now, without changing the voice mode.
+    VoiceStop,
 }
 
 impl Action {
@@ -59,6 +63,8 @@ impl Action {
             "voice-toggle" => return Some(Action::VoiceToggle),
             "recall" => return Some(Action::Recall),
             "previous-profile" => return Some(Action::PreviousProfile),
+            "new-conversation" => return Some(Action::NewConversation),
+            "voice-stop" => return Some(Action::VoiceStop),
             _ => {}
         }
         if spec == "draft" {

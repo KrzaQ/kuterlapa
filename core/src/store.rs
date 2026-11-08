@@ -87,8 +87,8 @@ impl Store {
         }
     }
 
-    /// For "start a new conversation", which no button triggers yet.
-    #[allow(dead_code)]
+    /// Starts a new conversation; `current_conversation` returns it from now
+    /// on, as the most recently updated one.
     pub fn new_conversation(&self, session: &str) -> Result<i64> {
         let db = self.db.lock().unwrap();
         db.execute("INSERT INTO conversations (session) VALUES (?1)", params![session])?;
