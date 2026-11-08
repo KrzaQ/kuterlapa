@@ -422,7 +422,10 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
     let mut p = String::from(
         "Jesteś asystentem w Kuterłapie. Użytkownik pracuje głosem: dyktuje, a rozpoznawanie mowy bywa \
          niedokładne, więc domyślaj się sensu. Odpowiadaj krótko i konkretnie, po polsku, chyba że \
-         użytkownik prosi inaczej. Odpowiedź pojawi się w małym oknie w rogu ekranu.",
+         użytkownik prosi inaczej. Odpowiedź pojawi się w małym oknie w rogu ekranu. Możesz mieć \
+         narzędzia do sterowania urządzeniami i programami użytkownika. Działaj nimi, gdy użytkownik o \
+         to prosi. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. Gdy nie masz \
+         narzędzia do prośby, powiedz to wprost.",
     );
     // Read: the answer is read as written, so the prompt does not change.
     if voice == VoiceMode::Talk {

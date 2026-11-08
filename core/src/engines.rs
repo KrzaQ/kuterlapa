@@ -1,7 +1,8 @@
 //! Engines: programs that run a language model for a profile. Each call is
 //! one request: a system prompt, a user message, an answer. With a session,
-//! Claude also gets the tools (tools.rs, through `kuterlapa mcp`) and web
-//! search.
+//! the model also gets the tools (tools.rs) through `kuterlapa mcp`: Claude
+//! with --mcp-config, pi with a small extension (pi-tools.ts). Claude also
+//! gets web search.
 
 use crate::paths;
 use crate::profiles::Profile;
@@ -28,7 +29,7 @@ pub fn complete_in(
 ) -> Result<String> {
     let mut command = match profile.engine.as_str() {
         "claude" => claude(profile, system, user, folder.is_some(), tools),
-        "pi" => pi(profile, system, user, folder.is_some()),
+        "pi" => pi(profile, system, user, folder.is_some(), tools),
         other => bail!("unknown engine {other:?} in profile {:?}", profile.name),
     };
     let state = paths::state_dir();
@@ -66,9 +67,24 @@ fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Opt
     c
 }
 
-fn pi(profile: &Profile, system: &str, user: &str, project: bool) -> Command {
+fn pi(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
     let mut c = Command::new("pi");
-    c.args(["-p", "--no-session", "--no-tools", "--model", &profile.model]);
+    c.args(["-p", "--no-session", "--model", &profile.model]);
+    let extension = tools.and_then(|_| pi_extension());
+    match (tools, extension, std::env::current_exe()) {
+        // Only the Kuterlapa tools: no shell, no files. The extension
+        // registers the server for this run only; pi's own settings stay as
+        // they are, so its extensions (for example a permission classifier)
+        // still judge each call.
+        (Some(session), Some(extension), Ok(me)) => {
+            c.arg("-e").arg(extension);
+            c.args(["--tools", "mcp__kuterlapa__*"]);
+            c.env("KUTERLAPA_EXE", me).env("KUTERLAPA_SESSION", session);
+        }
+        _ => {
+            c.arg("--no-tools");
+        }
+    }
     if project {
         c.args(["--append-system-prompt", system]);
     } else {
@@ -77,6 +93,20 @@ fn pi(profile: &Profile, system: &str, user: &str, project: bool) -> Command {
     c.args(["--thinking", profile.effort.as_deref().unwrap_or("off")]);
     c.arg(user);
     c
+}
+
+/// Writes the pi extension (pi-tools.ts) to the state folder, if it is not
+/// there yet or changed. Returns its path.
+fn pi_extension() -> Option<std::path::PathBuf> {
+    const SOURCE: &str = include_str!("pi-tools.ts");
+    let path = paths::state_dir().join("pi-tools.ts");
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(SOURCE) {
+        if let Err(e) = std::fs::write(&path, SOURCE) {
+            eprintln!("pi: cannot write {}: {e}", path.display());
+            return None;
+        }
+    }
+    Some(path)
 }
 
 /// The MCP configuration that starts this program as the tool server.
