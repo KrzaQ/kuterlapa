@@ -48,6 +48,7 @@ one key, joined with `+`. Key names: letters, digits, `Return`, `Tab`,
 |---|---|
 | `toggle` | Start recording, or stop it. |
 | `cancel` | Stop recording. Drop the text not sent yet. |
+| `finish` | Stop recording and answer only after the last text is sent: `stopped`, or `idle` if there was no recording. |
 
 The provider sends recognized text to the core as `dictate <text>`, piece
 by piece, while the user speaks.

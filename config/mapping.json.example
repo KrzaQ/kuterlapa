@@ -1,6 +1,6 @@
 {
   "Y": "speech:toggle",
-  "A": "Return",
+  "A": "finish-dictation|Return",
   "B": "erase-dictation|Escape",
   "Up": "PageUp",
   "Down": "PageDown",

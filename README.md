@@ -69,8 +69,9 @@ All in `~/.config/kuterlapa/`:
 - `config.toml`: which speech provider the core starts.
 - `mapping.json`: button → action. An action is a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
-  (erase the text of the last dictation, or press Escape), or
-  `"cmd:<shell command>"`. The app reads the file again when it changes.
+  (erase the text of the last dictation, or press Escape),
+  `"finish-dictation|Return"` (end the dictation, wait for its last words,
+  then press Enter), or `"cmd:<shell command>"`. The app reads the file again when it changes.
 - `speech.toml`: Whisper model, language, context, microphone.
 - `dictionary.txt`: words that Whisper should recognize (project and host
   names, tools). Most important first; Whisper reads about 200 tokens.
