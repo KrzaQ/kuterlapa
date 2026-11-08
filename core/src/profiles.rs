@@ -53,3 +53,32 @@ pub fn current(list: &[Profile]) -> usize {
 pub fn save(profile: &Profile) {
     let _ = fs::write(state_file(), &profile.name);
 }
+
+/// The profile in use, shared by the draft and the chat.
+pub struct Current {
+    inner: std::sync::Mutex<(Vec<Profile>, usize)>,
+}
+
+impl Current {
+    pub fn new() -> Current {
+        let list = load();
+        let index = current(&list);
+        Current { inner: std::sync::Mutex::new((list, index)) }
+    }
+
+    pub fn get(&self) -> Profile {
+        let p = self.inner.lock().unwrap();
+        p.0[p.1].clone()
+    }
+
+    /// Switches to the next profile (step 1) or the previous one (step -1),
+    /// reading the file again, and returns it.
+    pub fn step(&self, step: isize) -> Profile {
+        let mut p = self.inner.lock().unwrap();
+        p.0 = load();
+        let len = p.0.len() as isize;
+        p.1 = (p.1 as isize + step).rem_euclid(len) as usize;
+        save(&p.0[p.1]);
+        p.0[p.1].clone()
+    }
+}

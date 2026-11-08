@@ -22,6 +22,10 @@ pub fn config_dir() -> PathBuf {
     base("XDG_CONFIG_HOME", ".config")
 }
 
+pub fn data_dir() -> PathBuf {
+    base("XDG_DATA_HOME", ".local/share")
+}
+
 pub fn state_dir() -> PathBuf {
     base("XDG_STATE_HOME", ".local/state")
 }

@@ -34,15 +34,33 @@ pub enum Action {
     Draft,
     /// Switch to the next model profile.
     NextProfile,
+    /// Switch to the previous model profile, after one press too many.
+    PreviousProfile,
     /// Start or stop dictation into the application in front. While a
     /// draft is open, work on the draft instead.
     Dictate,
     /// A mouse action at the pointer: "click", "double-click", "right-click".
     Mouse(String),
+    /// Record a message to the session's conversation, or send it.
+    Chat,
+    /// Record a one-off command, or send it.
+    Command1,
+    /// Read answers aloud, or stop.
+    VoiceToggle,
+    /// Show the last answer again.
+    Recall,
 }
 
 impl Action {
     pub fn parse(spec: &str) -> Option<Action> {
+        match spec {
+            "chat" => return Some(Action::Chat),
+            "command" => return Some(Action::Command1),
+            "voice-toggle" => return Some(Action::VoiceToggle),
+            "recall" => return Some(Action::Recall),
+            "previous-profile" => return Some(Action::PreviousProfile),
+            _ => {}
+        }
         if spec == "draft" {
             return Some(Action::Draft);
         }

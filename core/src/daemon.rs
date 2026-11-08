@@ -1,9 +1,12 @@
 //! The core service: turns buttons and dictated text into actions.
 
+use crate::chat::{Chat, Mode};
 use crate::config::Config;
 use crate::draft::Draft;
 use crate::gestures::Recognizer;
 use crate::mapping::{Action, Mapping};
+use crate::profiles::Current;
+use crate::store::Store;
 use crate::{paths, shell, socket, speech, voice};
 use anyhow::Result;
 use serde_json::json;
@@ -19,6 +22,8 @@ struct State {
     /// forgets it.
     dictated: Mutex<String>,
     draft: Arc<Draft>,
+    chat: Arc<Chat>,
+    profiles: Arc<Current>,
     gestures: OnceLock<Arc<Recognizer>>,
 }
 
@@ -27,10 +32,14 @@ pub fn run(config: Config) -> Result<()> {
     extend_path();
     speech::supervise(config.speech.command);
     voice::supervise(config.voice.command);
+    let store = Arc::new(Store::open()?);
+    let profiles = Arc::new(Current::new());
     let state = Arc::new(State {
         mapping: Mutex::new(Mapping::new()),
         dictated: Mutex::new(String::new()),
-        draft: Arc::new(Draft::new()),
+        draft: Arc::new(Draft::new(Arc::clone(&profiles))),
+        chat: Arc::new(Chat::new(Arc::clone(&profiles), store)),
+        profiles,
         gestures: OnceLock::new(),
     });
     let for_gestures = Arc::clone(&state);
@@ -113,6 +122,10 @@ fn handle(state: &State, line: &str) -> String {
             state.draft.dictated(argument);
             "ok".into()
         }
+        "dictate" if state.chat.takes_dictation() => {
+            state.chat.dictated(argument);
+            "ok".into()
+        }
         "dictate" => {
             let answer = shell::type_text(argument);
             if answer == "ok" {
@@ -173,8 +186,36 @@ fn act(state: &State, button: &str) -> String {
             state.draft.button();
             "ok".into()
         }
-        Action::NextProfile => {
-            state.draft.next_profile();
+        Action::NextProfile | Action::PreviousProfile => {
+            let step = if action == Action::NextProfile { 1 } else { -1 };
+            let name = state.profiles.step(step).name;
+            eprintln!("profile: {name}");
+            if state.draft.active() {
+                state.draft.profile_changed(&name);
+            } else {
+                state.chat.profile_changed(&name);
+            }
+            "ok".into()
+        }
+        // A dictation for the draft or the chat already runs: the chat
+        // buttons do not start a second one.
+        Action::Chat | Action::Command1 if state.draft.takes_dictation() => "ok".into(),
+        Action::Chat => {
+            forget_dictation(state);
+            state.chat.button(Mode::Conversation);
+            "ok".into()
+        }
+        Action::Command1 => {
+            forget_dictation(state);
+            state.chat.button(Mode::Command);
+            "ok".into()
+        }
+        Action::VoiceToggle => {
+            state.chat.toggle_voice();
+            "ok".into()
+        }
+        Action::Recall => {
+            state.chat.recall();
             "ok".into()
         }
         Action::EraseDictation { .. } if state.draft.active() => {
@@ -182,6 +223,14 @@ fn act(state: &State, button: &str) -> String {
             "ok".into()
         }
         Action::FinishDictation { .. } if state.draft.active() => state.draft.send(),
+        Action::EraseDictation { .. } if state.chat.active() => {
+            state.chat.close();
+            "ok".into()
+        }
+        Action::FinishDictation { .. } if state.chat.takes_dictation() => {
+            state.chat.finish();
+            "ok".into()
+        }
         Action::EraseDictation { fallback } => {
             speech::send("cancel");
             let count = std::mem::take(&mut *state.dictated.lock().unwrap()).chars().count();

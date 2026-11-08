@@ -12,6 +12,7 @@
 //!   kuterlapa key <combo>       press a key combination
 //!   kuterlapa status            show the state of the running parts
 
+mod chat;
 mod config;
 mod daemon;
 mod draft;
@@ -21,9 +22,11 @@ mod mapping;
 mod paths;
 mod profiles;
 mod provider;
+mod sessions;
 mod shell;
 mod socket;
 mod speech;
+mod store;
 mod submit;
 mod voice;
 

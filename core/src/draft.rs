@@ -11,6 +11,7 @@
 //!   erase (B)                         drop the recording, or the draft
 
 use crate::profiles::{self, Profile};
+// `profiles::Current` is shared with the chat.
 use crate::{engines, shell, speech, submit};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
@@ -39,14 +40,12 @@ struct State {
 
 pub struct Draft {
     state: Mutex<State>,
-    profiles: Mutex<(Vec<Profile>, usize)>,
+    profiles: Arc<profiles::Current>,
 }
 
 impl Draft {
-    pub fn new() -> Draft {
-        let list = profiles::load();
-        let current = profiles::current(&list);
-        Draft { state: Mutex::new(State::default()), profiles: Mutex::new((list, current)) }
+    pub fn new(profiles: Arc<profiles::Current>) -> Draft {
+        Draft { state: Mutex::new(State::default()), profiles }
     }
 
     /// True while dictated text belongs to the draft, not to the
@@ -179,15 +178,8 @@ impl Draft {
         self.show();
     }
 
-    pub fn next_profile(self: &Arc<Self>) {
-        let name = {
-            let mut p = self.profiles.lock().unwrap();
-            p.0 = profiles::load();
-            p.1 = (p.1 + 1) % p.0.len();
-            profiles::save(&p.0[p.1]);
-            p.0[p.1].name.clone()
-        };
-        eprintln!("profile: {name}");
+    /// Shows a profile change. The daemon switched the profile already.
+    pub fn profile_changed(self: &Arc<Self>, name: &str) {
         // A note above the draft, not a separate view: replacing the view
         // made the draft vanish for a moment, which looked like the model
         // was writing it again.
@@ -207,8 +199,7 @@ impl Draft {
     }
 
     fn profile(&self) -> Profile {
-        let p = self.profiles.lock().unwrap();
-        p.0[p.1].clone()
+        self.profiles.get()
     }
 
     fn hide(&self) {
