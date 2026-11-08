@@ -25,6 +25,8 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `release <name>` | shell | The button went up. The core turns presses and releases into gestures: a single press, a double press (`X double` in mapping.json) or a hold (`Y hold`). |
 | `button <key>` | CLI | Run the action for a key directly, without gestures: `button A`, `button X double`. |
 | `dictate <text>` | speech provider | Type the text, and remember it as dictation so that `erase-dictation` can remove it. |
+| `countdown <s>` / `countdown cancel` | speech provider | A pause in a `start-auto` recording: the message sends itself in `s` seconds, unless speech returns. The overlay shows a shrinking bar. |
+| `auto-finish` | speech provider | The pause was long enough: finish the chat message as if the user pressed the button. |
 | `state <what> on\|off` | providers | The speech provider reports `listening`, the voice provider `speaking`. The core runs its hooks (config.toml `[hooks]`, see `core/src/hooks.rs`). |
 | `speech <request>` | CLI | Pass the request to the speech provider. |
 | `say <text>` | CLI | Read the text aloud with the voice provider. |
@@ -70,6 +72,7 @@ one key, joined with `+`. Key names: letters, digits, `Return`, `Tab`,
 | Request | Meaning |
 |---|---|
 | `toggle` | Start recording, or stop it. |
+| `start-auto` | Start a recording that ends by itself after a pause (3 s of silence, not before 10 s from the start; see `speech.toml`). |
 | `cancel` | Stop recording. Drop the text not sent yet. |
 | `finish` | Stop recording and answer only after the last text is sent: `stopped`, or `idle` if there was no recording. |
 
