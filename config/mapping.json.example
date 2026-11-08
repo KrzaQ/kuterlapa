@@ -5,5 +5,7 @@
   "Up": "PageUp",
   "Down": "PageDown",
   "Left": "ctrl+Left",
-  "Right": "ctrl+Right"
+  "Right": "ctrl+Right",
+  "X": "draft",
+  "L": "next-profile"
 }

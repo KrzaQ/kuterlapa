@@ -60,7 +60,7 @@ install: build ## Install the app, the CLI, the speech provider and example sett
 	ln -sf $(APP_DIR)/Kuterlapa.app/Contents/Helpers/kuterlapa $(BIN_DIR)/kuterlapa
 	uv tool install --force --reinstall './speech[$(SPEECH_BACKEND)]'
 	mkdir -p $(CONFIG_DIR)
-	for f in config.toml mapping.json speech.toml dictionary.txt replacements.txt; do \
+	for f in config.toml mapping.json profiles.json submit.json speech.toml dictionary.txt replacements.txt; do \
 		[ -e $(CONFIG_DIR)/$$f ] || cp config/$$f.example $(CONFIG_DIR)/$$f; \
 	done
 

@@ -1,0 +1,5 @@
+[
+  { "name": "Claude Opus", "engine": "claude", "model": "opus", "effort": "medium" },
+  { "name": "Claude Sonnet", "engine": "claude", "model": "sonnet" },
+  { "name": "Local model (pi)", "engine": "pi", "model": "ollama/qwen3:8b" }
+]
