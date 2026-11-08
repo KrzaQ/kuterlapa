@@ -41,6 +41,11 @@ pub fn speech_socket() -> PathBuf {
     state_dir().join("speech.sock")
 }
 
+/// The voice provider's socket: read text aloud.
+pub fn voice_socket() -> PathBuf {
+    state_dir().join("voice.sock")
+}
+
 /// Expands a leading "~/" in a path from a settings file.
 pub fn expand(path: &str) -> PathBuf {
     match path.strip_prefix("~/") {

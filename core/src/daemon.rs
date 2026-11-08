@@ -3,7 +3,7 @@
 use crate::config::Config;
 use crate::draft::Draft;
 use crate::mapping::{Action, Mapping};
-use crate::{paths, shell, socket, speech};
+use crate::{paths, shell, socket, speech, voice};
 use anyhow::Result;
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -23,6 +23,7 @@ pub fn run(config: Config) -> Result<()> {
     exit_when_stdin_closes();
     extend_path();
     speech::supervise(config.speech.command);
+    voice::supervise(config.voice.command);
     let state = State {
         mapping: Mutex::new(Mapping::new()),
         dictated: Mutex::new(String::new()),
@@ -78,6 +79,8 @@ fn handle(state: &State, line: &str) -> String {
             answer
         }
         "speech" => speech::send(argument),
+        "say" => voice::send(&format!("say {argument}")),
+        "voice" => voice::send(argument),
         "type" => {
             forget_dictation(state);
             shell::type_text(argument)

@@ -4,6 +4,10 @@
 //!   # The speech provider: a program that speaks the speech protocol
 //!   # (docs/protocol.md). Empty disables speech.
 //!   command = ["~/.local/bin/kuterlapa-speech"]
+//!
+//!   [voice]
+//!   # The voice provider, which reads text aloud. Empty disables it.
+//!   command = ["~/.local/bin/kuterlapa-voice"]
 
 use crate::paths;
 use anyhow::{Context, Result};
@@ -14,6 +18,20 @@ use std::fs;
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
     pub speech: Speech,
+    pub voice: Voice,
+}
+
+/// The voice provider, which reads text aloud. Empty disables the voice.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Voice {
+    pub command: Vec<String>,
+}
+
+impl Default for Voice {
+    fn default() -> Self {
+        Voice { command: vec!["~/.local/bin/kuterlapa-voice".into()] }
+    }
 }
 
 #[derive(Debug, Deserialize)]
