@@ -10,6 +10,8 @@
 //! overlay and waits for A (yes) or B (no).
 
 use crate::computer;
+use crate::help;
+use crate::mapping::Mapping;
 use crate::tools::{self, Tool};
 use crate::{paths, socket};
 use anyhow::Result;
@@ -53,6 +55,14 @@ pub fn run(args: &[String]) -> Result<()> {
             "tools/list" => {
                 let mut list: Vec<Value> = tools.iter().map(Tool::schema).collect();
                 list.extend(computer::schemas());
+                list.push(json!({
+                    "name": "kuterlapa_help",
+                    "description": "How to use Kuterlapa, the app the user talks to you through: what each \
+                                    controller button does (from the user's current settings) and how voice, \
+                                    the narrator, consent and cancelling work. Use it to answer questions \
+                                    about Kuterlapa or the controller.",
+                    "inputSchema": { "type": "object", "properties": {} },
+                }));
                 Ok(json!({ "tools": list }))
             }
             "tools/call" => Ok(call(&tools, &params)),
@@ -77,6 +87,10 @@ fn call(tools: &[Tool], params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let empty = Map::new();
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);
+    if name == "kuterlapa_help" {
+        let text = help::text(&mut Mapping::new());
+        return json!({ "content": [{ "type": "text", "text": text }], "isError": false });
+    }
     if computer::has(name) && !tools.iter().any(|t| t.name == name) {
         eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
         let (content, ok) = computer::call(name, arguments);

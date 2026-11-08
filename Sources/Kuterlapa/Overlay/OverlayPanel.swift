@@ -15,8 +15,12 @@ final class OverlayPanel {
     private let detailLabel = OverlayPanel.label(size: 12, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
     private let countdownBar = CountdownBar()
+    private let helpView = NSStackView()
     private var background: NSVisualEffectView!
+    private var widthConstraint: NSLayoutConstraint!
     private let width: CGFloat = 440
+    /// The help needs room for two columns.
+    private let helpWidth: CGFloat = 640
     private let margin: CGFloat = 12
 
     init() {
@@ -43,7 +47,13 @@ final class OverlayPanel {
         buttonRow.spacing = 10
         buttonRow.isHidden = true
 
-        let stack = NSStackView(views: [titleLabel, statusLabel, countdownBar, headingLabel, textLabel, detailLabel, buttonRow, hintLabel])
+        helpView.orientation = .horizontal
+        helpView.alignment = .top
+        helpView.spacing = 28
+        helpView.isHidden = true
+
+        let stack = NSStackView(views: [titleLabel, statusLabel, countdownBar, headingLabel, textLabel, detailLabel,
+                                        helpView, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -55,15 +65,14 @@ final class OverlayPanel {
             stack.trailingAnchor.constraint(equalTo: background.trailingAnchor),
             stack.topAnchor.constraint(equalTo: background.topAnchor),
             stack.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            stack.widthAnchor.constraint(equalToConstant: width),
-            buttonRow.widthAnchor.constraint(equalToConstant: width - 28),
-            countdownBar.widthAnchor.constraint(equalToConstant: width - 28),
+            buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28),
+            countdownBar.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28),
             countdownBar.heightAnchor.constraint(equalToConstant: 6),
         ])
+        widthConstraint = stack.widthAnchor.constraint(equalToConstant: width)
+        widthConstraint.isActive = true
         countdownBar.isHidden = true
-        for label in [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, hintLabel] {
-            label.preferredMaxLayoutWidth = width - 28
-        }
+        setWidth(width)
         panel.contentView = background
     }
 
@@ -91,6 +100,9 @@ final class OverlayPanel {
         set(textLabel, state["text"])
         set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
+        let help = state["help"] as? [[String: Any]] ?? []
+        setWidth(help.isEmpty ? width : helpWidth)
+        setHelp(help)
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
         if let countdown = state["countdown"] as? [String: Any],
            let ends = countdown["ends"] as? Double, let total = countdown["total"] as? Double, total > 0 {
@@ -115,6 +127,104 @@ final class OverlayPanel {
     }
 
     private var wasAsking = false
+
+    private func setWidth(_ value: CGFloat) {
+        widthConstraint.constant = value
+        for label in [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, hintLabel] {
+            label.preferredMaxLayoutWidth = value - 28
+        }
+    }
+
+    // MARK: Help
+
+    /// The help: groups of rows, each with keys and a short text, in two
+    /// columns of about the same length.
+    /// "help": [{"title": "Mówienie", "rows": [{"keys": "X ×2", "text": "nowy szkic"}]}]
+    private func setHelp(_ groups: [[String: Any]]) {
+        for view in helpView.arrangedSubviews {
+            helpView.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        helpView.isHidden = groups.isEmpty
+        guard !groups.isEmpty else { return }
+        let sizes = groups.map { ($0["rows"] as? [[String: Any]])?.count ?? 0 }
+        // Fill the left column up to about half of all rows.
+        let half = (sizes.reduce(0, +) + 1) / 2
+        var split = 0, filled = 0
+        while split < groups.count - 1 && filled + sizes[split] / 2 < half {
+            filled += sizes[split]
+            split += 1
+        }
+        let columnWidth = (helpWidth - 28 - helpView.spacing) / 2
+        for part in [groups[..<max(split, 1)], groups[max(split, 1)...]] where !part.isEmpty {
+            let column = NSStackView()
+            column.orientation = .vertical
+            column.alignment = .leading
+            column.spacing = 5
+            for group in part {
+                let title = OverlayPanel.label(size: 11, weight: .bold, color: .systemOrange)
+                title.stringValue = (group["title"] as? String ?? "").uppercased()
+                if column.arrangedSubviews.count > 0 {
+                    column.setCustomSpacing(14, after: column.arrangedSubviews.last!)
+                }
+                column.addArrangedSubview(title)
+                column.setCustomSpacing(7, after: title)
+                for row in group["rows"] as? [[String: Any]] ?? [] {
+                    column.addArrangedSubview(OverlayPanel.helpRow(keys: row["keys"] as? String ?? "",
+                                                                   text: row["text"] as? String ?? "",
+                                                                   width: columnWidth))
+                }
+            }
+            column.widthAnchor.constraint(equalToConstant: columnWidth).isActive = true
+            helpView.addArrangedSubview(column)
+        }
+    }
+
+    /// One help row: the keys as small key caps, then what they do.
+    private static func helpRow(keys: String, text: String, width: CGFloat) -> NSView {
+        let caps = NSStackView()
+        caps.orientation = .horizontal
+        caps.spacing = 4
+        for key in keys.components(separatedBy: " · ") {
+            caps.addArrangedSubview(keyCap(key))
+        }
+        let keyColumn: CGFloat = 126
+        caps.widthAnchor.constraint(equalToConstant: keyColumn).isActive = true
+        caps.setHuggingPriority(.required, for: .horizontal)
+        caps.addArrangedSubview(NSView())  // pushes the caps to the left
+        let label = OverlayPanel.label(size: 14, weight: .regular, color: .labelColor)
+        label.stringValue = text
+        label.preferredMaxLayoutWidth = width - keyColumn - 10
+        let row = NSStackView(views: [caps, label])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        return row
+    }
+
+    /// A key cap: "X", "Y ×2" or "lewa gałka" on a light, rounded plate.
+    private static func keyCap(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.textColor = .labelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let plate = NSView()
+        plate.wantsLayer = true
+        plate.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        plate.layer?.cornerRadius = 5
+        plate.layer?.borderWidth = 1
+        plate.layer?.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
+        plate.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: plate.leadingAnchor, constant: 7),
+            label.trailingAnchor.constraint(equalTo: plate.trailingAnchor, constant: -7),
+            label.topAnchor.constraint(equalTo: plate.topAnchor, constant: 2),
+            label.bottomAnchor.constraint(equalTo: plate.bottomAnchor, constant: -2),
+            plate.widthAnchor.constraint(greaterThanOrEqualToConstant: 26),
+        ])
+        label.alignment = .center
+        return plate
+    }
 
     private func setButtons(_ buttons: [[String: Any]]) {
         for view in buttonRow.arrangedSubviews {
