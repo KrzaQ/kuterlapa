@@ -11,6 +11,7 @@
 
 use crate::computer;
 use crate::memory;
+use crate::sessions;
 use crate::help;
 use crate::mapping::Mapping;
 use crate::tools::{self, Tool};
@@ -57,6 +58,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 let mut list: Vec<Value> = tools.iter().map(Tool::schema).collect();
                 list.extend(computer::schemas());
                 list.extend(memory_schemas());
+                list.extend(session_schemas());
                 list.push(json!({
                     "name": "kuterlapa_help",
                     "description": "How to use Kuterlapa, the app the user talks to you through: what each \
@@ -92,6 +94,14 @@ fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
     if name.starts_with("memory_") {
         eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
         let (text, ok) = match memory_call(name, arguments, session) {
+            Ok(text) => (text, true),
+            Err(e) => (format!("error: {e:#}"), false),
+        };
+        return result(text, ok);
+    }
+    if name.starts_with("session_") {
+        eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
+        let (text, ok) = match session_call(name, arguments) {
             Ok(text) => (text, true),
             Err(e) => (format!("error: {e:#}"), false),
         };
@@ -191,6 +201,82 @@ fn memory_call(name: &str, args: &Map<String, Value>, session: &str) -> anyhow::
             let to = scope("to").ok_or_else(|| anyhow::anyhow!("to must be global or session"))?;
             memory::move_to(session, text("name"), to)?;
             Ok(format!("Moved note {} to {}.", text("name"), place(to)))
+        }
+        other => anyhow::bail!("no tool {other}"),
+    }
+}
+
+fn session_schemas() -> Vec<Value> {
+    let strings = json!({ "type": "array", "items": { "type": "string" } });
+    vec![
+        json!({
+            "name": "session_list",
+            "description": "List the user's sessions (named contexts for work, each with its own conversation, \
+                            notes and words), which one is current, and whether the window in front picks it.",
+            "inputSchema": { "type": "object", "properties": {} },
+        }),
+        json!({
+            "name": "session_switch",
+            "description": "Make a session current, when the user asks to go to it. It stays until the user \
+                            switches again (sticky). The next message goes to that session's conversation.",
+            "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
+        }),
+        json!({
+            "name": "session_auto",
+            "description": "From now on, pick the session from the window in front each time the user starts to \
+                            speak (by each session's apps and title rules); \"general\" when none fits.",
+            "inputSchema": { "type": "object", "properties": {} },
+        }),
+        json!({
+            "name": "session_create",
+            "description": "Create a new session when the user asks: a short name, what it is about, and \
+                            optionally a project folder and the windows that pick it (application names or \
+                            bundle ids, parts of window titles).",
+            "inputSchema": { "type": "object", "properties": {
+                "name": { "type": "string" },
+                "context": { "type": "string", "description": "What the session is about, for the model" },
+                "folder": { "type": "string" },
+                "apps": strings,
+                "titles": strings,
+            }, "required": ["name", "context"] },
+        }),
+    ]
+}
+
+fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String> {
+    let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default();
+    let list = |key: &str| -> Vec<String> {
+        args.get(key)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+            .unwrap_or_default()
+    };
+    match name {
+        "session_list" => {
+            let current = sessions::current_name();
+            let mode = if sessions::automatic() { "picked by the window in front" } else { "sticky" };
+            let mut out = format!("Current session: {current} ({mode}).\n");
+            for s in sessions::all() {
+                let about = s.context.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+                let rules = s.rules();
+                out.push_str(&format!("- {}{}{}\n", s.name,
+                    if about.is_empty() { String::new() } else { format!(": {about}") },
+                    if rules.is_empty() { String::new() } else { format!(" [{rules}]") }));
+            }
+            Ok(out)
+        }
+        "session_switch" => {
+            let name = sessions::switch(text("name"), true)?;
+            Ok(format!("Session {name} is current now and stays until the user switches."))
+        }
+        "session_auto" => {
+            sessions::set_automatic()?;
+            Ok("Sessions now follow the window in front.".into())
+        }
+        "session_create" => {
+            let folder = Some(text("folder")).filter(|f| !f.is_empty());
+            let name = sessions::create(text("name"), text("context"), folder, &list("apps"), &list("titles"))?;
+            Ok(format!("Created session {name}. It is not current; switch to it if the user wants."))
         }
         other => anyhow::bail!("no tool {other}"),
     }

@@ -393,6 +393,11 @@ impl Chat {
         });
     }
 
+    /// The window in front picked another session.
+    pub fn session_changed(self: &Arc<Self>, name: &str) {
+        self.flash(&format!("Sesja: {name} (z okna)"));
+    }
+
     pub fn profile_changed(self: &Arc<Self>, name: &str) {
         self.flash(&format!("Profil: {name}"));
     }
@@ -458,7 +463,8 @@ impl Chat {
             VoiceMode::Read => " · 🔊",
             VoiceMode::Talk => " · 🗣",
         };
-        let title = format!("{kind} · {session} · {profile}{speaker}");
+        let picked = if sessions::automatic() { " (auto)" } else { "" };
+        let title = format!("{kind} · {session}{picked} · {profile}{speaker}");
         let status = if let Some(note) = &s.note {
             note.clone()
         } else if s.recording {

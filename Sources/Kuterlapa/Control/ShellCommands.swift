@@ -11,6 +11,8 @@ import AppKit
 ///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
 ///   mouse <what>   click, double-click or right-click at the pointer
 ///   frontmost      the bundle identifier of the application in front
+///   window         the application in front and its window's title:
+///                  "<bundle id>\t<name>\t<title>"
 ///   status         one line with the app state
 ///
 /// For the model's computer tools (Computer.swift); coordinates are the
@@ -41,6 +43,8 @@ enum ShellCommands {
             return "accessibility=\(Keystrokes.allowed)"
         case "frontmost":
             return NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        case "window":
+            return frontWindow()
         case "overlay":
             guard let data = argument.data(using: .utf8),
                   let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -118,4 +122,22 @@ enum ShellCommands {
             return "error: unknown request \(verb)"
         }
     }
+}
+
+/// The application in front and the title of its focused window, from the
+/// accessibility tree (Chrome adds its profile to the title there).
+private func frontWindow() -> String {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return "" }
+    var title = ""
+    let element = AXUIElementCreateApplication(app.processIdentifier)
+    var window: CFTypeRef?
+    if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
+       let window {
+        var value: CFTypeRef?
+        // swiftlint:disable:next force_cast
+        AXUIElementCopyAttributeValue(window as! AXUIElement, kAXTitleAttribute as CFString, &value)
+        title = value as? String ?? ""
+    }
+    let clean = { (s: String) in s.replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "\n", with: " ") }
+    return [app.bundleIdentifier ?? "", app.localizedName ?? "", title].map(clean).joined(separator: "\t")
 }

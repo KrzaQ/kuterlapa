@@ -106,6 +106,9 @@ pub fn text(mapping: &mut Mapping) -> String {
          - Gdy narzędzie pyta o zgodę, w okienku są duże przyciski: A to tak, B to nie.\n\
          - B w trakcie myślenia modelu przerywa go razem z narzędziami.\n\
          - Nazwa profilu modelu (Opus, Qwen) jest w tytule okienka.\n\
+         - Sesje: osobne konteksty pracy (rozmowa, notatki, słownik). Przejście: „przejdź do sesji X” \
+         (zostaje, dopóki nie zmienisz). „Wybieraj sesję automatycznie”: sesję wybiera okno na wierzchu \
+         według reguł sesji; w tytule okienka jest wtedy „(auto)”. „Utwórz sesję …” zakłada nową.\n\
          - Pamięć: model zapisuje sobie notatki (np. jak dojść do WhatsAppa) i korzysta z nich następnym \
          razem; globalne dotyczą komputera i użytkownika, notatki sesji jej tematu. Można powiedzieć \
          „zapamiętaj”, „zapomnij” albo „przenieś do globalnych”.\n\

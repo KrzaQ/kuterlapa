@@ -10,7 +10,7 @@ use crate::hooks::{self, Flag};
 use crate::mapping::{Action, Mapping};
 use crate::profiles::Current;
 use crate::store::Store;
-use crate::{paths, shell, socket, speech, voice};
+use crate::{paths, sessions, shell, socket, speech, voice};
 use anyhow::Result;
 use serde_json::json;
 use std::io::Read;
@@ -204,6 +204,15 @@ fn act(state: &Arc<State>, button: &str) -> String {
         return "ok".into();
     };
     eprintln!("{button}: {action:?}");
+    // A recording is about to start: with automatic sessions, the window in
+    // front picks the session first, so the right context and dictionary
+    // are used.
+    if matches!(action, Action::Dictate | Action::Draft | Action::Chat | Action::Command1) {
+        if let Some(name) = sessions::follow_window() {
+            eprintln!("session: {name} (from the window in front)");
+            state.chat.session_changed(&name);
+        }
+    }
     match action {
         // A question about a tool waits: A says yes, B says no.
         Action::FinishDictation { .. } if approvals::answer(true) => "ok".into(),

@@ -93,6 +93,22 @@ def report(listening):
     _states.put(f"state listening {'on' if listening else 'off'}")
 
 
+def session_dictionaries(settings):
+    """The current session's word list first, then the global ones.
+
+    The core keeps the current session's name in the state folder and picks
+    it before a recording starts.
+    """
+    try:
+        session = (config.STATE / "session").read_text(encoding="utf-8").strip()
+    except OSError:
+        session = ""
+    own = config.CONFIG / "sessions" / session / "dictionary.txt" if session else None
+    if own is not None and own.is_file():
+        return [str(own)] + [d for d in settings.dictionaries if d != str(own)]
+    return list(settings.dictionaries)
+
+
 PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
 
 
@@ -133,6 +149,7 @@ class Dictation:
         self.wav = None
         self.last_text = ""
         self.cancelled = False
+        self.dictionaries = list(settings.dictionaries)
         self.auto = False
         self.workers = []
         self.stream = None
@@ -221,6 +238,7 @@ class Dictation:
         self.frames, self.pieces = queue.Queue(), queue.Queue()
         self.recorded, self.texts = [], []
         self.cancelled = False
+        self.dictionaries = session_dictionaries(self.settings)
         if self.stream is None:
             self._open_stream()
         elif not self.stream.active:
@@ -299,7 +317,7 @@ class Dictation:
         while (piece := self.pieces.get()) is not None:
             if self.cancelled:
                 continue
-            prompt = build_prompt(s.prompt_intro, s.dictionaries, self.last_text)
+            prompt = build_prompt(s.prompt_intro, self.dictionaries, self.last_text)
             t = time.time()
             try:
                 raw = self.backend.transcribe(piece, s.language, prompt)

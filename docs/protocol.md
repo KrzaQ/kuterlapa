@@ -46,6 +46,7 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `sticks <json>` | What the analog sticks do, for example `{"leftstick": "scroll", "rightstick": "mouse"}`. The shell moves the pointer and scrolls by itself. |
 | `overlay <json>` | Show the overlay with this state, or hide it (`{"visible": false}`). |
 | `frontmost` | The identifier of the application in front (a bundle id on macOS). |
+| `window` | The application in front and its focused window's title: `<bundle id>\t<name>\t<title>`. |
 | `status` | State of the shell, for example its permissions. |
 | `screen` | Screenshot of the main display, scaled to points: `<path> <width> <height>`. Needs the Screen Recording permission. |
 | `ui` | The usable elements of the window in front, numbered, one per line, written to a file: answers its path. |
