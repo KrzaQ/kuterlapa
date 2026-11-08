@@ -179,11 +179,35 @@ impl Chat {
     fn send_recording(&self) {
         // Waits until the provider has sent the last words.
         speech::send("finish");
-        let (mode, question, thread) = {
+        let question = {
             let mut s = self.state.lock().unwrap();
             s.recording = false;
             s.countdown = None;
-            let question = std::mem::take(&mut s.pending).trim().to_string();
+            std::mem::take(&mut s.pending)
+        };
+        self.send(&question);
+    }
+
+    /// Sends a typed message to the conversation, without speech (`kuterlapa
+    /// ask <text>`, for tests). Ignored while the chat records or thinks.
+    pub fn ask_text(&self, text: &str) {
+        {
+            let mut s = self.state.lock().unwrap();
+            if s.recording || s.busy {
+                return;
+            }
+            s.mode = Mode::Conversation;
+            s.thread = None;
+            s.visible = true;
+            s.error = None;
+        }
+        self.send(text);
+    }
+
+    fn send(&self, question: &str) {
+        let (mode, question, thread) = {
+            let mut s = self.state.lock().unwrap();
+            let question = question.trim().to_string();
             if question.is_empty() {
                 drop(s);
                 return self.show();
@@ -206,6 +230,8 @@ impl Chat {
                     s.answer = answer;
                     (s.voice != VoiceMode::Off).then(|| s.answer.clone())
                 }
+                // Cancelled with B: say nothing, the overlay is closed.
+                Err(e) if engines::is_cancelled(&e) => None,
                 Err(e) => {
                     eprintln!("chat: {e:#}");
                     s.error = Some(format!("{e}"));
@@ -268,6 +294,10 @@ impl Chat {
         } else {
             voice::send("stop");
             let mut s = self.state.lock().unwrap();
+            if s.busy {
+                // Stop the model and its tools, not only the view.
+                engines::cancel_all();
+            }
             s.visible = false;
             s.thread = None;
         }

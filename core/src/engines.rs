@@ -8,8 +8,63 @@ use crate::paths;
 use crate::profiles::Profile;
 use anyhow::{bail, Context, Result};
 use serde_json::json;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use std::time::Duration;
+
+/// A model request that is running, so that it can be cancelled.
+struct Running {
+    pid: u32,
+    cancelled: bool,
+}
+
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
+/// The error of a request the user cancelled.
+#[derive(Debug)]
+pub struct Cancelled;
+
+impl std::fmt::Display for Cancelled {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "cancelled")
+    }
+}
+
+impl std::error::Error for Cancelled {}
+
+/// Stops every running model request at once: the engine, its tool server
+/// and the tools it runs, so nothing more happens after the user cancels.
+/// The process group gets SIGTERM, and SIGKILL a second later if any of it
+/// is still there.
+pub fn cancel_all() {
+    let groups: Vec<u32> = {
+        let mut running = RUNNING.lock().unwrap();
+        running.iter_mut().for_each(|r| r.cancelled = true);
+        running.iter().map(|r| r.pid).collect()
+    };
+    for pid in groups {
+        eprintln!("engine: cancelling process group {pid}");
+        signal_group(pid, "TERM");
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(1));
+            signal_group(pid, "KILL");
+        });
+    }
+}
+
+fn signal_group(pid: u32, signal: &str) {
+    let _ = Command::new("/bin/kill")
+        .args([format!("-{signal}"), "--".into(), format!("-{pid}")])
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// True if the error is a cancelled request.
+pub fn is_cancelled(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<Cancelled>().is_some()
+}
 
 /// One request without tools.
 pub fn complete(profile: &Profile, system: &str, user: &str) -> Result<String> {
@@ -34,7 +89,24 @@ pub fn complete_in(
     };
     let state = paths::state_dir();
     command.current_dir(folder.unwrap_or(&state)).stdin(Stdio::null());
-    let output = command.output().with_context(|| format!("starting {}", profile.engine))?;
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Its own process group: cancelling stops the engine together with its
+    // tool server and any tool it runs.
+    command.process_group(0);
+    let child = command.spawn().with_context(|| format!("starting {}", profile.engine))?;
+    let pid = child.id();
+    RUNNING.lock().unwrap().push(Running { pid, cancelled: false });
+    let output = child.wait_with_output();
+    let cancelled = {
+        let mut running = RUNNING.lock().unwrap();
+        let cancelled = running.iter().any(|r| r.pid == pid && r.cancelled);
+        running.retain(|r| r.pid != pid);
+        cancelled
+    };
+    if cancelled {
+        bail!(Cancelled);
+    }
+    let output = output.with_context(|| format!("waiting for {}", profile.engine))?;
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
         bail!("{} failed: {}", profile.engine, error.trim());

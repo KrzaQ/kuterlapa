@@ -127,6 +127,8 @@ impl Draft {
             match result {
                 Ok(text) if !text.is_empty() => s.text = text,
                 Ok(_) => s.error = Some("model zwrócił pusty tekst".into()),
+                // Discarded with B while the model worked: nothing to show.
+                Err(e) if engines::is_cancelled(&e) => {}
                 Err(e) => {
                     eprintln!("draft: {e:#}");
                     s.error = Some(format!("{e}"));
@@ -173,7 +175,11 @@ impl Draft {
             s.recording = false;
             s.pending.clear();
         } else {
-            *self.state.lock().unwrap() = State::default();
+            let mut s = self.state.lock().unwrap();
+            if s.busy {
+                engines::cancel_all();
+            }
+            *s = State::default();
         }
         self.show();
     }
