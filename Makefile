@@ -26,11 +26,12 @@ help: ## Show this help
 		awk 'BEGIN {FS = ":.*?## "; w = 12} { k[NR] = $$1; v[NR] = $$2; if (length($$1) > w) w = length($$1) } \
 		     END { for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m  %s\n", w, k[i], v[i] }'
 
-build: ## Build the core and the macOS app, and sign build/Kuterlapa.app
+build: build/AppIcon.icns ## Build the core and the macOS app, and sign build/Kuterlapa.app
 	cd core && cargo build --release
 	swift build -c release
 	rm -rf $(APP)
-	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Helpers
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Helpers $(APP)/Contents/Resources
+	cp build/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	cp .build/release/Kuterlapa $(APP)/Contents/MacOS/Kuterlapa
 	# Helpers/, not MacOS/: the default macOS file system ignores case, so
 	# "kuterlapa" next to "Kuterlapa" would overwrite the app.
@@ -40,6 +41,11 @@ build: ## Build the core and the macOS app, and sign build/Kuterlapa.app
 	codesign --force --sign '$(SIGN_IDENTITY)' --identifier '$(BUNDLE_ID).core' \
 		$(APP)/Contents/Helpers/kuterlapa
 	codesign --force --sign '$(SIGN_IDENTITY)' --identifier '$(BUNDLE_ID)' $(APP)
+
+build/AppIcon.icns: scripts/make-icon.swift
+	rm -rf build/AppIcon.iconset
+	swift scripts/make-icon.swift build/AppIcon.iconset
+	iconutil -c icns build/AppIcon.iconset -o $@
 
 test: ## Run the core's tests
 	cd core && cargo test
