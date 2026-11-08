@@ -20,10 +20,20 @@ pub enum Action {
     /// Erase the text of the last dictation and stop the recording.
     /// With nothing to erase, press the fallback key, if any.
     EraseDictation { fallback: Option<String> },
+    /// End the dictation, if one runs, wait for its last words, then press
+    /// the key, if any. "finish-dictation|Return" makes one button both
+    /// "I am done speaking" and "send".
+    FinishDictation { then: Option<String> },
 }
 
 impl Action {
     pub fn parse(spec: &str) -> Option<Action> {
+        if spec == "finish-dictation" {
+            return Some(Action::FinishDictation { then: None });
+        }
+        if let Some(key) = spec.strip_prefix("finish-dictation|") {
+            return Some(Action::FinishDictation { then: Some(key.to_string()) });
+        }
         if spec == "erase-dictation" {
             return Some(Action::EraseDictation { fallback: None });
         }
@@ -104,6 +114,10 @@ mod tests {
             Some(Action::EraseDictation { fallback: Some("Escape".into()) })
         );
         assert_eq!(Action::parse("erase-dictation"), Some(Action::EraseDictation { fallback: None }));
+        assert_eq!(
+            Action::parse("finish-dictation|Return"),
+            Some(Action::FinishDictation { then: Some("Return".into()) })
+        );
         assert_eq!(Action::parse("two words"), None);
     }
 }

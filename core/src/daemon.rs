@@ -10,18 +10,18 @@ use std::sync::Mutex;
 use std::thread;
 
 struct State {
-    mapping: Mapping,
+    mapping: Mutex<Mapping>,
     /// Text that dictation typed since the last other action. Erasing it
     /// is right only while the cursor stays at its end, so any other action
     /// forgets it.
-    dictated: String,
+    dictated: Mutex<String>,
 }
 
 pub fn run(config: Config) -> Result<()> {
     exit_when_stdin_closes();
     speech::supervise(config.speech.command);
-    let state = Mutex::new(State { mapping: Mapping::new(), dictated: String::new() });
-    state.lock().unwrap().mapping.reload_if_changed();
+    let state = State { mapping: Mutex::new(Mapping::new()), dictated: Mutex::new(String::new()) };
+    state.mapping.lock().unwrap().reload_if_changed();
     socket::serve(&paths::core_socket(), move |line| handle(&state, line))
 }
 
@@ -38,25 +38,28 @@ fn exit_when_stdin_closes() {
     });
 }
 
-fn handle(state: &Mutex<State>, line: &str) -> String {
+// No lock is held while the core waits for the speech provider: the
+// provider sends "dictate" requests back while it finishes, and those need
+// the dictation buffer.
+
+fn handle(state: &State, line: &str) -> String {
     let (verb, argument) = line.split_once(' ').unwrap_or((line, ""));
-    let mut state = state.lock().unwrap();
     match verb {
-        "button" => press(&mut state, argument),
+        "button" => press(state, argument),
         "dictate" => {
             let answer = shell::type_text(argument);
             if answer == "ok" {
-                state.dictated.push_str(argument);
+                state.dictated.lock().unwrap().push_str(argument);
             }
             answer
         }
         "speech" => speech::send(argument),
         "type" => {
-            state.dictated.clear();
+            forget_dictation(state);
             shell::type_text(argument)
         }
         "key" => {
-            state.dictated.clear();
+            forget_dictation(state);
             shell::key(argument)
         }
         "status" => format!("shell: {}", shell::send("status")),
@@ -64,33 +67,48 @@ fn handle(state: &Mutex<State>, line: &str) -> String {
     }
 }
 
-fn press(state: &mut State, button: &str) -> String {
-    let Some(action) = state.mapping.action(button) else {
+fn forget_dictation(state: &State) {
+    state.dictated.lock().unwrap().clear();
+}
+
+fn press(state: &State, button: &str) -> String {
+    let action = state.mapping.lock().unwrap().action(button);
+    let Some(action) = action else {
         eprintln!("{button}: no mapping");
         return "ok".into();
     };
     eprintln!("{button}: {action:?}");
     match action {
         Action::Key(combo) => {
-            state.dictated.clear();
+            forget_dictation(state);
             shell::key(&combo)
         }
         Action::Speech(request) => speech::send(&request),
         Action::Command(command) => {
-            state.dictated.clear();
+            forget_dictation(state);
             run_command(&command);
             "ok".into()
         }
         Action::EraseDictation { fallback } => {
             speech::send("cancel");
-            let count = state.dictated.chars().count();
-            state.dictated.clear();
+            let count = std::mem::take(&mut *state.dictated.lock().unwrap()).chars().count();
             if count > 0 {
                 shell::erase(count)
             } else if let Some(key) = fallback {
                 shell::key(&key)
             } else {
                 "ok".into()
+            }
+        }
+        Action::FinishDictation { then } => {
+            let finished = speech::send("finish");
+            if finished.starts_with("error") {
+                eprintln!("{button}: {finished}");
+            }
+            forget_dictation(state);
+            match then {
+                Some(key) => shell::key(&key),
+                None => "ok".into(),
             }
         }
     }
