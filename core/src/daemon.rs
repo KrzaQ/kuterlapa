@@ -2,12 +2,14 @@
 
 use crate::config::Config;
 use crate::draft::Draft;
+use crate::gestures::Recognizer;
 use crate::mapping::{Action, Mapping};
 use crate::{paths, shell, socket, speech, voice};
 use anyhow::Result;
+use serde_json::json;
 use std::io::Read;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 struct State {
@@ -17,6 +19,7 @@ struct State {
     /// forgets it.
     dictated: Mutex<String>,
     draft: Arc<Draft>,
+    gestures: OnceLock<Arc<Recognizer>>,
 }
 
 pub fn run(config: Config) -> Result<()> {
@@ -24,13 +27,33 @@ pub fn run(config: Config) -> Result<()> {
     extend_path();
     speech::supervise(config.speech.command);
     voice::supervise(config.voice.command);
-    let state = State {
+    let state = Arc::new(State {
         mapping: Mutex::new(Mapping::new()),
         dictated: Mutex::new(String::new()),
         draft: Arc::new(Draft::new()),
-    };
+        gestures: OnceLock::new(),
+    });
+    let for_gestures = Arc::clone(&state);
+    let _ = state.gestures.set(Recognizer::new(move |button, gesture| {
+        let key = gesture.key(button);
+        let answer = act(&for_gestures, &key);
+        if answer != "ok" {
+            eprintln!("{key}: {answer}");
+        }
+    }));
     state.mapping.lock().unwrap().reload_if_changed();
+    send_sticks(&state);
     socket::serve(&paths::core_socket(), move |line| handle(&state, line))
+}
+
+/// Tell the platform shell what the analog sticks do. The shell moves the
+/// pointer and scrolls by itself: it has to update many times a second.
+fn send_sticks(state: &State) {
+    let sticks = state.mapping.lock().unwrap().sticks().clone();
+    let answer = shell::send(&format!("sticks {}", json!(sticks)));
+    if answer != "ok" {
+        eprintln!("sticks: {answer}");
+    }
 }
 
 /// The platform shell starts the core with a pipe on stdin. When the shell
@@ -66,7 +89,26 @@ fn extend_path() {
 fn handle(state: &State, line: &str) -> String {
     let (verb, argument) = line.split_once(' ').unwrap_or((line, ""));
     match verb {
-        "button" => press(state, argument),
+        // A whole press, without gestures (the CLI uses it: `kuterlapa
+        // press A`, or "kuterlapa press X double").
+        "button" => act(state, argument),
+        "press" | "release" => {
+            let (has, changed) = {
+                let mut mapping = state.mapping.lock().unwrap();
+                let changed = mapping.reload_if_changed();
+                (mapping.has(argument), changed)
+            };
+            if changed {
+                send_sticks(state);
+            }
+            let gestures = state.gestures.get().expect("set at start");
+            if verb == "press" {
+                gestures.press(argument, has);
+            } else {
+                gestures.release(argument, has);
+            }
+            "ok".into()
+        }
         "dictate" if state.draft.takes_dictation() => {
             state.draft.dictated(argument);
             "ok".into()
@@ -98,7 +140,8 @@ fn forget_dictation(state: &State) {
     state.dictated.lock().unwrap().clear();
 }
 
-fn press(state: &State, button: &str) -> String {
+/// Runs the action for a key such as "X" or "X double".
+fn act(state: &State, button: &str) -> String {
     let action = state.mapping.lock().unwrap().action(button);
     let Some(action) = action else {
         eprintln!("{button}: no mapping");
@@ -106,6 +149,15 @@ fn press(state: &State, button: &str) -> String {
     };
     eprintln!("{button}: {action:?}");
     match action {
+        Action::Dictate if state.draft.active() => {
+            state.draft.button();
+            "ok".into()
+        }
+        Action::Dictate => speech::send("toggle"),
+        Action::Mouse(what) => {
+            forget_dictation(state);
+            shell::send(&format!("mouse {what}"))
+        }
         Action::Key(combo) => {
             forget_dictation(state);
             shell::key(&combo)

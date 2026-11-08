@@ -16,6 +16,7 @@ mod config;
 mod daemon;
 mod draft;
 mod engines;
+mod gestures;
 mod mapping;
 mod paths;
 mod profiles;

@@ -1,9 +1,14 @@
 //! Button-to-action mapping, read from ~/.config/kuterlapa/mapping.json:
-//!   { "A": "Return", "Y": "speech:toggle", "B": "erase-dictation|Escape" }
-//! The file is read again when it changes, so a new mapping needs no restart.
+//!   { "A": "Return", "X": "dictate", "X double": "draft", "R3": "click",
+//!     "LeftStick": "scroll", "RightStick": "mouse" }
+//! A key is a button name, optionally followed by " double" or " hold".
+//! Keys ending in "Stick" set what an analog stick does; the platform shell
+//! handles stick movement itself. The file is read again when it changes,
+//! so a new mapping needs no restart.
 
+use crate::gestures::Has;
 use crate::paths;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -29,12 +34,23 @@ pub enum Action {
     Draft,
     /// Switch to the next model profile.
     NextProfile,
+    /// Start or stop dictation into the application in front. While a
+    /// draft is open, work on the draft instead.
+    Dictate,
+    /// A mouse action at the pointer: "click", "double-click", "right-click".
+    Mouse(String),
 }
 
 impl Action {
     pub fn parse(spec: &str) -> Option<Action> {
         if spec == "draft" {
             return Some(Action::Draft);
+        }
+        if spec == "dictate" {
+            return Some(Action::Dictate);
+        }
+        if matches!(spec, "click" | "double-click" | "right-click") {
+            return Some(Action::Mouse(spec.to_string()));
         }
         if spec == "next-profile" {
             return Some(Action::NextProfile);
@@ -68,25 +84,49 @@ pub struct Mapping {
     path: PathBuf,
     loaded: Option<SystemTime>,
     actions: HashMap<String, Action>,
+    /// "leftstick" -> "scroll", and so on; sent to the platform shell.
+    sticks: BTreeMap<String, String>,
 }
 
 impl Mapping {
     pub fn new() -> Mapping {
-        Mapping { path: paths::config_dir().join("mapping.json"), loaded: None, actions: HashMap::new() }
+        Mapping {
+            path: paths::config_dir().join("mapping.json"),
+            loaded: None,
+            actions: HashMap::new(),
+            sticks: BTreeMap::new(),
+        }
     }
 
-    pub fn action(&mut self, button: &str) -> Option<Action> {
+    /// The action for a key such as "X" or "X double".
+    pub fn action(&mut self, key: &str) -> Option<Action> {
         self.reload_if_changed();
-        self.actions.get(&button.to_lowercase()).cloned()
+        self.actions.get(&key.to_lowercase()).cloned()
     }
 
-    pub fn reload_if_changed(&mut self) {
+    /// Which gestures besides a single press the button has actions for.
+    pub fn has(&mut self, button: &str) -> Has {
+        self.reload_if_changed();
+        let b = button.to_lowercase();
+        Has {
+            double: self.actions.contains_key(&format!("{b} double")),
+            hold: self.actions.contains_key(&format!("{b} hold")),
+        }
+    }
+
+    pub fn sticks(&self) -> &BTreeMap<String, String> {
+        &self.sticks
+    }
+
+    /// Returns true if the file changed and was read again.
+    pub fn reload_if_changed(&mut self) -> bool {
         let modified = fs::metadata(&self.path).and_then(|m| m.modified()).ok();
         if modified.is_some() && modified == self.loaded {
-            return;
+            return false;
         }
         self.loaded = modified;
         self.actions.clear();
+        self.sticks.clear();
         let raw: HashMap<String, String> = match fs::read_to_string(&self.path)
             .map_err(|e| e.to_string())
             .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
@@ -94,12 +134,16 @@ impl Mapping {
             Ok(raw) => raw,
             Err(e) => {
                 eprintln!("cannot read {}: {e}", self.path.display());
-                return;
+                return true;
             }
         };
         let mut listed: Vec<_> = raw.iter().collect();
         listed.sort();
         for (button, spec) in listed {
+            if button.to_lowercase().ends_with("stick") {
+                self.sticks.insert(button.to_lowercase(), spec.clone());
+                continue;
+            }
             match Action::parse(spec) {
                 Some(action) => {
                     self.actions.insert(button.to_lowercase(), action);
@@ -108,6 +152,7 @@ impl Mapping {
             }
         }
         eprintln!("mapping: {} buttons from {}", self.actions.len(), self.path.display());
+        true
     }
 }
 
