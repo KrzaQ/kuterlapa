@@ -1,0 +1,25 @@
+# Settings of kuterlapa-voice. Copy to ~/.config/kuterlapa/voice.toml.
+# Every setting is optional; the values below are the defaults.
+
+# "say" (macOS), "command" (any program) or "mlx" (a local model; install
+# with VOICE_EXTRA=mlx).
+backend = "say"
+
+# say: the macOS voice; empty means the system default. `say -v '?'` lists
+# them.
+say_voice = ""
+
+# command: a program that gets the text on stdin and writes a 16-bit WAV to
+# stdout. Use it for a speech service you already run.
+# command = ["~/bin/my-tts", "--voice", "narrator"]
+
+# mlx: a model id or folder. With ref_audio and ref_text (the text spoken in
+# the clip, or a path to a file with it) the model clones that voice.
+# model = "~/models/fish-audio-drama-3-4bit"
+# ref_audio = "~/.local/share/kuterlapa/voices/narrator.wav"
+# ref_text = "~/.local/share/kuterlapa/voices/narrator.txt"
+
+# The first piece is short, so speech starts soon; later pieces are made
+# while earlier ones play.
+first_piece_chars = 80
+piece_chars = 300

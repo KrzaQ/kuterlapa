@@ -24,6 +24,8 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `button <name>` | shell | A controller button was pressed. Names: `A B X Y L R ZL ZR + - Share Up Down Left Right`. |
 | `dictate <text>` | speech provider | Type the text, and remember it as dictation so that `erase-dictation` can remove it. |
 | `speech <request>` | CLI | Pass the request to the speech provider. |
+| `say <text>` | CLI | Read the text aloud with the voice provider. |
+| `voice <request>` | CLI | Pass the request (`stop`, `status`) to the voice provider. |
 | `type <text>` | CLI | Type the text. |
 | `key <combo>` | CLI | Press a key combination. |
 | `status` | CLI | State of the parts. |
@@ -52,6 +54,17 @@ one key, joined with `+`. Key names: letters, digits, `Return`, `Tab`,
 
 The provider sends recognized text to the core as `dictate <text>`, piece
 by piece, while the user speaks.
+
+## Voice provider: `voice.sock`
+
+Reads text aloud. Default: `kuterlapa-voice`, with the backends `say`,
+`command` and `mlx`.
+
+| Request | Meaning |
+|---|---|
+| `say <text>` | Read the text aloud, after anything still being read. Answers at once. |
+| `stop` | Stop reading and drop what is waiting. |
+| `status` | `speaking` or `idle`. |
 
 ## Process lifetime
 

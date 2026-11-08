@@ -5,3 +5,8 @@
 # The speech provider: any program that implements the speech protocol
 # (docs/protocol.md). An empty list disables speech.
 command = ["~/.local/bin/kuterlapa-speech"]
+
+[voice]
+# The voice provider, which reads text aloud: any program that implements
+# the voice protocol. An empty list disables the voice.
+command = ["~/.local/bin/kuterlapa-voice"]

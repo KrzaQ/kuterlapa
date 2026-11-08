@@ -30,6 +30,9 @@ Three kinds of processes, so each part can be replaced on its own
   Shells for Linux and Windows can follow; the core does not change.
 - `speech/`: `kuterlapa-speech`, a speech provider (Python, MLX Whisper).
   Any program that follows the speech protocol can replace it.
+- `voice/`: `kuterlapa-voice`, a voice provider that reads text aloud
+  (`kuterlapa say "…"`). Backends: macOS `say`, any command, or a local
+  mlx-audio model that can clone a voice from a reference clip.
 - `config/`: example settings.
 
 ## Requirements
