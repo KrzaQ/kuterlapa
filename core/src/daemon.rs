@@ -150,6 +150,20 @@ fn handle(state: &State, line: &str) -> String {
         // The MCP server asks before a tool with confirm = true. The answer
         // waits for the A or B button.
         "approve" => approvals::ask(argument, || state.chat.refresh()),
+        // The speech provider counts down a pause in a chat message, and
+        // finishes the message when the pause is long enough.
+        "countdown" => {
+            state.chat.countdown(argument.parse::<f64>().ok());
+            "ok".into()
+        }
+        "auto-finish" => {
+            // Sending waits for the model, and the provider must not wait.
+            let chat = Arc::clone(&state.chat);
+            thread::spawn(move || {
+                chat.finish();
+            });
+            "ok".into()
+        }
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),

@@ -99,6 +99,9 @@ struct State {
     last_activity: Option<Instant>,
     voice: VoiceMode,
     note: Option<String>,
+    /// While the user pauses: when the message sends itself (Unix time in
+    /// seconds) and how long the countdown is.
+    countdown: Option<(f64, f64)>,
 }
 
 pub struct Chat {
@@ -154,7 +157,9 @@ impl Chat {
         };
         if start {
             voice::send("stop");
-            speech::send("toggle");
+            // The recording ends by itself after a pause (the speech
+            // provider counts it down), or with the button.
+            speech::send("start-auto");
             self.show();
         } else {
             self.send_recording();
@@ -177,6 +182,7 @@ impl Chat {
         let (mode, question, thread) = {
             let mut s = self.state.lock().unwrap();
             s.recording = false;
+            s.countdown = None;
             let question = std::mem::take(&mut s.pending).trim().to_string();
             if question.is_empty() {
                 drop(s);
@@ -256,6 +262,7 @@ impl Chat {
             speech::send("cancel");
             let mut s = self.state.lock().unwrap();
             s.recording = false;
+            s.countdown = None;
             s.pending.clear();
             if s.answer.is_empty() && s.error.is_none() {
                 s.visible = false;
@@ -357,6 +364,25 @@ impl Chat {
         });
     }
 
+    /// The speech provider heard a pause: the message sends itself in
+    /// `seconds`, unless the user speaks again (None).
+    pub fn countdown(&self, seconds: Option<f64>) {
+        {
+            let mut s = self.state.lock().unwrap();
+            if !s.recording {
+                return;
+            }
+            s.countdown = seconds.map(|total| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or_default();
+                (now + total, total)
+            });
+        }
+        self.show();
+    }
+
     /// Shows the overlay as the chat state says, for example after a
     /// question about a tool covered it.
     pub fn refresh(&self) {
@@ -414,7 +440,10 @@ impl Chat {
         } else {
             "Y: dalej · Y Y: polecenie · B: zamknij"
         };
-        let state = json!({ "visible": true, "title": title, "status": status, "text": text, "hint": hint });
+        let mut state = json!({ "visible": true, "title": title, "status": status, "text": text, "hint": hint });
+        if let Some((ends, total)) = s.countdown {
+            state["countdown"] = json!({ "ends": ends, "total": total });
+        }
         drop(s);
         shell::overlay(&state);
     }

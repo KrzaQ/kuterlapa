@@ -14,6 +14,7 @@ final class OverlayPanel {
     private let hintLabel = OverlayPanel.label(size: 11, weight: .regular, color: .tertiaryLabelColor)
     private let detailLabel = OverlayPanel.label(size: 12, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
+    private let countdownBar = CountdownBar()
     private var background: NSVisualEffectView!
     private let width: CGFloat = 440
     private let margin: CGFloat = 12
@@ -42,7 +43,7 @@ final class OverlayPanel {
         buttonRow.spacing = 10
         buttonRow.isHidden = true
 
-        let stack = NSStackView(views: [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, buttonRow, hintLabel])
+        let stack = NSStackView(views: [titleLabel, statusLabel, countdownBar, headingLabel, textLabel, detailLabel, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -56,7 +57,10 @@ final class OverlayPanel {
             stack.bottomAnchor.constraint(equalTo: background.bottomAnchor),
             stack.widthAnchor.constraint(equalToConstant: width),
             buttonRow.widthAnchor.constraint(equalToConstant: width - 28),
+            countdownBar.widthAnchor.constraint(equalToConstant: width - 28),
+            countdownBar.heightAnchor.constraint(equalToConstant: 6),
         ])
+        countdownBar.isHidden = true
         for label in [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, hintLabel] {
             label.preferredMaxLayoutWidth = width - 28
         }
@@ -73,6 +77,9 @@ final class OverlayPanel {
     /// "buttons": [{"key": "A", "label": "Tak", "tone": "yes"},
     ///             {"key": "B", "label": "Nie", "tone": "no"}],
     /// "attention": true
+    ///
+    /// While the user pauses in a chat message, a bar shrinks until the
+    /// message sends itself: "countdown": {"ends": <Unix time>, "total": <s>}.
     func update(_ state: [String: Any]) {
         guard state["visible"] as? Bool == true else {
             panel.orderOut(nil)
@@ -85,6 +92,12 @@ final class OverlayPanel {
         set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
+        if let countdown = state["countdown"] as? [String: Any],
+           let ends = countdown["ends"] as? Double, let total = countdown["total"] as? Double, total > 0 {
+            countdownBar.start(ends: Date(timeIntervalSince1970: ends), total: total)
+        } else {
+            countdownBar.stop()
+        }
         let attention = state["attention"] as? Bool == true
         background.layer?.borderWidth = attention ? 2 : 0
         background.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.8).cgColor
@@ -155,5 +168,53 @@ final class OverlayPanel {
         label.textColor = color
         label.isSelectable = false
         return label
+    }
+}
+
+/// A thin bar that shrinks from full to empty, 30 times a second, until a
+/// moment. It keeps its pace when the overlay updates during the countdown.
+final class CountdownBar: NSView {
+    private let fill = CALayer()
+    private var timer: Timer?
+    private var ends = Date()
+    private var total: TimeInterval = 1
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 3
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        fill.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.85).cgColor
+        fill.cornerRadius = 3
+        fill.anchorPoint = .zero
+        layer?.addSublayer(fill)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func start(ends: Date, total: TimeInterval) {
+        self.ends = ends
+        self.total = total
+        isHidden = false
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+        tick()
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        isHidden = true
+    }
+
+    private func tick() {
+        let left = max(0, min(1, ends.timeIntervalSinceNow / total))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fill.frame = CGRect(x: 0, y: 0, width: bounds.width * left, height: bounds.height)
+        CATransaction.commit()
     }
 }
