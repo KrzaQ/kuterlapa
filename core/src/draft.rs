@@ -32,6 +32,9 @@ struct State {
     /// The model is editing the draft.
     busy: bool,
     error: Option<String>,
+    /// A short message under the title, for example after a profile
+    /// change. It does not replace the draft on screen.
+    note: Option<String>,
 }
 
 pub struct Draft {
@@ -185,14 +188,21 @@ impl Draft {
             p.0[p.1].name.clone()
         };
         eprintln!("profile: {name}");
-        shell::overlay(&json!({
-            "visible": true, "title": format!("Profil: {name}"), "status": "", "text": "", "hint": "L: następny profil",
-        }));
-        // Go back to the draft view, or hide, after a moment.
+        // A note above the draft, not a separate view: replacing the view
+        // made the draft vanish for a moment, which looked like the model
+        // was writing it again.
+        let note = format!("Profil: {name}");
+        self.state.lock().unwrap().note = Some(note.clone());
+        self.show();
         let me = Arc::clone(self);
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
-            me.show();
+            let mut s = me.state.lock().unwrap();
+            if s.note.as_deref() == Some(note.as_str()) {
+                s.note = None;
+                drop(s);
+                me.show();
+            }
         });
     }
 
@@ -210,11 +220,24 @@ impl Draft {
     fn show(&self) {
         let profile = self.profile().name;
         let s = self.state.lock().unwrap();
-        if !s.recording && !s.busy && s.text.is_empty() && s.error.is_none() {
+        let draft = s.recording || s.busy || !s.text.is_empty() || s.error.is_some();
+        if !draft && s.note.is_none() {
             drop(s);
             return self.hide();
         }
-        let status = if s.recording {
+        if !draft {
+            // Only a note, no draft: a small view with the note alone.
+            let state = json!({
+                "visible": true, "title": s.note.clone().unwrap_or_default(), "status": "", "text": "",
+                "hint": "L: następny profil",
+            });
+            drop(s);
+            shell::overlay(&state);
+            return;
+        }
+        let status = if let Some(note) = &s.note {
+            note.clone()
+        } else if s.recording {
             "Słucham…".to_string()
         } else if s.busy {
             format!("{profile} poprawia szkic…")
