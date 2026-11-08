@@ -8,6 +8,8 @@ line per connection:
 
     toggle   start recording, or stop it
     cancel   stop recording and drop the pieces not typed yet
+    finish   stop recording and answer once the last piece is sent:
+             "stopped", or "idle" if it was not recording
 
 While recording, it cuts the audio at pauses in speech. Each piece goes to
 Whisper at once, and the text goes to the Kuterlapa core
@@ -79,6 +81,21 @@ class Dictation:
         with self.lock:
             if self.stream is not None:
                 self._stop(cancelled=True)
+
+    def finish(self):
+        """Stop recording, if it runs, and wait until the last piece is sent.
+
+        Returns "stopped" or "idle". The core uses it before it presses
+        Enter, so the Enter comes after the whole text.
+        """
+        with self.lock:
+            if self.stream is None:
+                return "idle"
+            self._stop()
+            workers = list(self.workers)
+        for w in workers:
+            w.join()
+        return "stopped"
 
     def _start(self):
         day = Path(self.settings.recordings) / f"{datetime.date.today():%Y-%m-%d}"
@@ -185,8 +202,17 @@ def serve(dictation):
     log(f"listening on {sock}")
     while True:
         conn, _ = srv.accept()
+        cmd = conn.recv(256).decode().strip()
+        if cmd == "finish":
+            # Answered only when done; its own thread, so other requests
+            # (and the pieces still on their way) are not blocked.
+            def answer(conn=conn):
+                with conn:
+                    conn.sendall((dictation.finish() + "\n").encode())
+
+            threading.Thread(target=answer, daemon=True).start()
+            continue
         with conn:
-            cmd = conn.recv(256).decode().strip()
             conn.sendall(b"ok\n")
         if cmd == "toggle":
             threading.Thread(target=dictation.toggle, daemon=True).start()
