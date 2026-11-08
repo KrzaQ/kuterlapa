@@ -18,10 +18,11 @@ use std::time::Duration;
 const SETTLE: Duration = Duration::from_millis(300);
 
 const STEP: &str = r#"{"type": "object", "properties": {
-    "action": {"type": "string", "enum": ["press", "click", "type", "key", "scroll", "activate", "wait"]},
+    "action": {"type": "string", "enum": ["press", "click", "type", "key", "scroll", "activate", "focus_window", "desktop", "wait"]},
     "element": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"},
     "how": {"type": "string"}, "text": {"type": "string"}, "combo": {"type": "string"},
     "direction": {"type": "string"}, "amount": {"type": "number"}, "name": {"type": "string"},
+    "window": {"type": "integer"}, "target": {"type": "string"},
     "ms": {"type": "number"}}, "required": ["action"]}"#;
 
 const TOOLS: &[(&str, &str, &str)] = &[
@@ -83,6 +84,23 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ),
     ("computer_apps", "List the running applications; the one in front is marked with *.", r#"{}"#),
     (
+        "computer_windows",
+        "List the windows of all applications, numbered, with the virtual desktop each is on, and \
+         the number of the current desktop. Use it to find where a window is.",
+        r#"{}"#,
+    ),
+    (
+        "computer_focus_window",
+        "Bring a window to the front by its number from computer_windows: go to its desktop and \
+         raise it.",
+        r#"{"window": {"type": "integer"}}"#,
+    ),
+    (
+        "computer_desktop",
+        "Go to a virtual desktop: its number, \"left\" or \"right\".",
+        r#"{"target": {"type": "string", "description": "A number such as 2, or left, or right"}}"#,
+    ),
+    (
         "computer_activate",
         "Bring an application to the front by its name (for example Safari, Slack), or open it.",
         r#"{"name": {"type": "string"}}"#,
@@ -122,6 +140,7 @@ pub fn call(name: &str, args: &Map<String, Value>) -> (Vec<Value>, bool) {
         "computer_ui" => ui(None),
         "computer_find" => ui(Some(&text(args, "text"))),
         "computer_apps" => Ok(shell::send("apps").replace(" | ", "\n")),
+        "computer_windows" => checked(shell::send("windows")).map(|l| l.replace(" | ", "\n")),
         "computer_do" => run_steps(args),
         other => match other.strip_prefix("computer_") {
             Some(action) => act(action, args).and_then(|_| after()),
@@ -174,6 +193,14 @@ fn act(action: &str, args: &Map<String, Value>) -> Result<(), String> {
             shell::send(&format!("scroll {x} {y} {dx} {dy}"))
         }
         "activate" => shell::send(&format!("activate {}", text(args, "name"))),
+        "focus_window" => shell::send(&format!("focus {}", number("window").ok_or("window is missing")? as i64)),
+        "desktop" => {
+            let target = match args.get("target") {
+                Some(Value::Number(n)) => n.to_string(),
+                _ => text(args, "target"),
+            };
+            shell::send(&format!("desktop {target}"))
+        }
         "wait" => {
             thread::sleep(Duration::from_millis(number("ms").unwrap_or(500.0).clamp(0.0, 5000.0) as u64));
             "ok".into()
@@ -210,6 +237,13 @@ fn ui(filter: Option<&str>) -> Result<String, String> {
         return Ok(format!("{}\n(no element contains {filter:?})", lines.join("\n")));
     }
     Ok(lines.join("\n"))
+}
+
+fn checked(answer: String) -> Result<String, String> {
+    match answer.strip_prefix("error: ") {
+        Some(e) => Err(e.to_string()),
+        None => Ok(answer),
+    }
 }
 
 fn text(args: &Map<String, Value>, key: &str) -> String {

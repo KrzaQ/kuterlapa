@@ -21,6 +21,9 @@ import AppKit
 ///   scroll <x> <y> <dx> <dy>  scroll at a point by pixels
 ///   apps                      running applications, "*" in front
 ///   activate <name>           bring an application to the front, or open it
+///   windows                   all windows and their desktops, numbered
+///   focus <n>                 go to window n from the last list
+///   desktop <n|left|right>    go to a virtual desktop
 ///
 /// The answer is "ok", a status line, or "error: ...".
 enum ShellCommands {
@@ -49,6 +52,8 @@ enum ShellCommands {
             return Computer.apps()
         case "activate":
             return Computer.activate(argument)
+        case "windows":
+            return Desktops.list()
         case "sticks":
             guard let data = argument.data(using: .utf8),
                   let roles = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -90,6 +95,11 @@ enum ShellCommands {
             let n = argument.split(separator: " ").compactMap { Double($0) }
             guard n.count == 4 else { return "error: usage: scroll <x> <y> <dx> <dy>" }
             return Computer.scroll(at: Computer.point(n[0], n[1]), dx: Int32(n[2]), dy: Int32(n[3]))
+        case "focus":
+            guard let number = Int(argument) else { return "error: bad window \(argument)" }
+            return Desktops.focus(number)
+        case "desktop":
+            return Desktops.go(argument)
         case "erase":
             guard let count = Int(argument), count >= 0, let backspace = KeyCombo("Backspace") else {
                 return "error: bad count \(argument)"
