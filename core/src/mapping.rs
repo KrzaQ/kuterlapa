@@ -24,10 +24,21 @@ pub enum Action {
     /// the key, if any. "finish-dictation|Return" makes one button both
     /// "I am done speaking" and "send".
     FinishDictation { then: Option<String> },
+    /// Dictate into a draft in the overlay. The first press starts the
+    /// draft; each next one adds speech that the model applies to it.
+    Draft,
+    /// Switch to the next model profile.
+    NextProfile,
 }
 
 impl Action {
     pub fn parse(spec: &str) -> Option<Action> {
+        if spec == "draft" {
+            return Some(Action::Draft);
+        }
+        if spec == "next-profile" {
+            return Some(Action::NextProfile);
+        }
         if spec == "finish-dictation" {
             return Some(Action::FinishDictation { then: None });
         }

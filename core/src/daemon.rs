@@ -1,12 +1,13 @@
 //! The core service: turns buttons and dictated text into actions.
 
 use crate::config::Config;
+use crate::draft::Draft;
 use crate::mapping::{Action, Mapping};
 use crate::{paths, shell, socket, speech};
 use anyhow::Result;
 use std::io::Read;
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 struct State {
@@ -15,12 +16,18 @@ struct State {
     /// is right only while the cursor stays at its end, so any other action
     /// forgets it.
     dictated: Mutex<String>,
+    draft: Arc<Draft>,
 }
 
 pub fn run(config: Config) -> Result<()> {
     exit_when_stdin_closes();
+    extend_path();
     speech::supervise(config.speech.command);
-    let state = State { mapping: Mutex::new(Mapping::new()), dictated: Mutex::new(String::new()) };
+    let state = State {
+        mapping: Mutex::new(Mapping::new()),
+        dictated: Mutex::new(String::new()),
+        draft: Arc::new(Draft::new()),
+    };
     state.mapping.lock().unwrap().reload_if_changed();
     socket::serve(&paths::core_socket(), move |line| handle(&state, line))
 }
@@ -38,6 +45,19 @@ fn exit_when_stdin_closes() {
     });
 }
 
+/// An app started from Finder or by `open` gets a short PATH. Engines
+/// (claude, pi) and their tools (node) live in the usual user places.
+fn extend_path() {
+    let home = paths::home();
+    let mut dirs = vec![home.join(".local/bin"), "/opt/homebrew/bin".into(), "/usr/local/bin".into()];
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
+    if let Ok(joined) = std::env::join_paths(dirs) {
+        std::env::set_var("PATH", joined);
+    }
+}
+
 // No lock is held while the core waits for the speech provider: the
 // provider sends "dictate" requests back while it finishes, and those need
 // the dictation buffer.
@@ -46,6 +66,10 @@ fn handle(state: &State, line: &str) -> String {
     let (verb, argument) = line.split_once(' ').unwrap_or((line, ""));
     match verb {
         "button" => press(state, argument),
+        "dictate" if state.draft.takes_dictation() => {
+            state.draft.dictated(argument);
+            "ok".into()
+        }
         "dictate" => {
             let answer = shell::type_text(argument);
             if answer == "ok" {
@@ -89,6 +113,20 @@ fn press(state: &State, button: &str) -> String {
             run_command(&command);
             "ok".into()
         }
+        Action::Draft => {
+            forget_dictation(state);
+            state.draft.button();
+            "ok".into()
+        }
+        Action::NextProfile => {
+            state.draft.next_profile();
+            "ok".into()
+        }
+        Action::EraseDictation { .. } if state.draft.active() => {
+            state.draft.discard();
+            "ok".into()
+        }
+        Action::FinishDictation { .. } if state.draft.active() => state.draft.send(),
         Action::EraseDictation { fallback } => {
             speech::send("cancel");
             let count = std::mem::take(&mut *state.dictated.lock().unwrap()).chars().count();

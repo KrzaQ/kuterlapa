@@ -11,11 +11,15 @@
 
 mod config;
 mod daemon;
+mod draft;
+mod engines;
 mod mapping;
 mod paths;
+mod profiles;
 mod shell;
 mod socket;
 mod speech;
+mod submit;
 
 use anyhow::{bail, Result};
 
