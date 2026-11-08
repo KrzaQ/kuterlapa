@@ -228,8 +228,9 @@ impl Chat {
                 let conversation = self.store.current_conversation(&session.name)?;
                 let history = self.store.messages(conversation, HISTORY)?;
                 self.store.add_message(conversation, "user", question, None)?;
+                let system = with_history(&system, &history);
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
+                    engines::complete_in(&profile, &system, question, session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_message(conversation, "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, None))
             }
@@ -239,8 +240,9 @@ impl Chat {
                     None => Vec::new(),
                 };
                 let thread = self.store.add_command(thread, Some(&session.name), "user", question, None)?;
+                let system = with_history(&system, &history);
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
+                    engines::complete_in(&profile, &system, question, session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, Some(thread)))
             }
@@ -445,17 +447,21 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
     p
 }
 
-fn with_history(history: &[Message], question: &str) -> String {
+/// The earlier messages go into the system prompt, so the user message is
+/// only the new request. Permission classifiers (pi-censor, Claude's auto
+/// mode) judge a tool call by the user's message and may read only its
+/// start: with the history in front, they missed the new request.
+fn with_history(system: &str, history: &[Message]) -> String {
     if history.is_empty() {
-        return question.to_string();
+        return system.to_string();
     }
-    let mut text = String::from("Dotychczasowa rozmowa:\n\n");
+    let mut text = format!("{system}\n\nDotychczasowa rozmowa (starsze prośby są już załatwione; odpowiadasz \
+                            na nową wiadomość użytkownika):\n\n");
     for m in history {
         let who = if m.role == "user" { "Użytkownik" } else { "Asystent" };
         text.push_str(&format!("{who}: {}\n\n", m.text));
     }
-    text.push_str(&format!("Nowa wiadomość użytkownika:\n{question}"));
-    text
+    text.trim_end().to_string()
 }
 
 /// Markdown read aloud sounds bad: drop code blocks and markup.
