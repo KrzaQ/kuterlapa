@@ -24,6 +24,14 @@ microphone = ""
 # time. While it is open, the words just before a button press are kept.
 microphone_idle_close = 30
 
+# A chat message (Y) sends itself after a pause: after `auto_finish`
+# seconds of silence, but never before `auto_finish_min` seconds from the
+# start of the recording. After `countdown_after` seconds of silence the
+# overlay shows a bar that counts down. Speaking again stops the countdown.
+auto_finish = 3.0
+countdown_after = 1.0
+auto_finish_min = 10.0
+
 # Word lists for Whisper's context, one word or phrase per line,
 # most important first. Whisper reads only about 200 tokens of context.
 dictionaries = ["~/.config/kuterlapa/dictionary.txt"]
