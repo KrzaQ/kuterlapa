@@ -45,6 +45,17 @@ An answer is `ok`, a status line, or `error: <message>`.
 | `overlay <json>` | Show the overlay with this state, or hide it (`{"visible": false}`). |
 | `frontmost` | The identifier of the application in front (a bundle id on macOS). |
 | `status` | State of the shell, for example its permissions. |
+| `screen` | Screenshot of the main display, scaled to points: `<path> <width> <height>`. Needs the Screen Recording permission. |
+| `ui` | The usable elements of the window in front, numbered, one per line, written to a file: answers its path. |
+| `press <n>` | Press element `n` from the last `ui` list (or click its middle). |
+| `click <x> <y> [how]` | `click`, `double-click` or `right-click` at a point. |
+| `scroll <x> <y> <dx> <dy>` | Scroll at a point by pixels. |
+| `apps` | Running applications, joined with ` \| `; `*` marks the one in front. |
+| `activate <name>` | Bring an application to the front, or open it. |
+
+Points are screen coordinates with 0,0 in the top left corner of the main
+display. The core's MCP server offers these to the model as the
+`computer_*` tools (`core/src/computer.rs`).
 
 Key combinations: modifiers `cmd`, `ctrl`, `alt` (`option`), `shift`, and
 one key, joined with `+`. Key names: letters, digits, `Return`, `Tab`,

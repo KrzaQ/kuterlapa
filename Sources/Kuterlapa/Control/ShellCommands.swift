@@ -12,6 +12,16 @@ import AppKit
 ///   frontmost      the bundle identifier of the application in front
 ///   status         one line with the app state
 ///
+/// For the model's computer tools (Computer.swift); points are screen
+/// coordinates from the top left:
+///   screen                    screenshot; answers "<path> <width> <height>"
+///   ui                        elements of the window in front; answers a path
+///   press <n>                 press element n from the last ui list
+///   click <x> <y> [how]       click, double-click or right-click at a point
+///   scroll <x> <y> <dx> <dy>  scroll at a point by pixels
+///   apps                      running applications, "*" in front
+///   activate <name>           bring an application to the front, or open it
+///
 /// The answer is "ok", a status line, or "error: ...".
 enum ShellCommands {
     /// Set by the app delegate once they exist.
@@ -33,6 +43,12 @@ enum ShellCommands {
             else { return "error: bad overlay state" }
             overlay?.update(state)
             return "ok"
+        case "screen":
+            return Computer.screenshot()
+        case "apps":
+            return Computer.apps()
+        case "activate":
+            return Computer.activate(argument)
         case "sticks":
             guard let data = argument.data(using: .utf8),
                   let roles = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -59,6 +75,21 @@ enum ShellCommands {
             default: return "error: unknown mouse action \(argument)"
             }
             return "ok"
+        case "ui":
+            return Computer.ui()
+        case "press":
+            guard let number = Int(argument) else { return "error: bad element \(argument)" }
+            return Computer.press(number)
+        case "click":
+            let words = argument.split(separator: " ").map(String.init)
+            guard words.count >= 2, let x = Double(words[0]), let y = Double(words[1]) else {
+                return "error: usage: click <x> <y> [click|double-click|right-click]"
+            }
+            return Computer.click(at: CGPoint(x: x, y: y), how: words.count > 2 ? words[2] : "click")
+        case "scroll":
+            let n = argument.split(separator: " ").compactMap { Double($0) }
+            guard n.count == 4 else { return "error: usage: scroll <x> <y> <dx> <dy>" }
+            return Computer.scroll(at: CGPoint(x: n[0], y: n[1]), dx: Int32(n[2]), dy: Int32(n[3]))
         case "erase":
             guard let count = Int(argument), count >= 0, let backspace = KeyCombo("Backspace") else {
                 return "error: bad count \(argument)"

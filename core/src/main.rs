@@ -16,6 +16,7 @@
 
 mod approvals;
 mod chat;
+mod computer;
 mod config;
 mod daemon;
 mod draft;

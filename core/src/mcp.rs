@@ -1,5 +1,5 @@
 //! `kuterlapa mcp`: an MCP server on stdin and stdout that gives the model
-//! the tools from tools.rs. The engine (for example `claude -p`) starts it
+//! the tools from tools.rs and the computer tools from computer.rs. The engine (for example `claude -p`) starts it
 //! for each request.
 //!
 //!   kuterlapa mcp [--session <name>]
@@ -9,6 +9,7 @@
 //! ("approve <json>" on core.sock), and the core shows the question in the
 //! overlay and waits for A (yes) or B (no).
 
+use crate::computer;
 use crate::tools::{self, Tool};
 use crate::{paths, socket};
 use anyhow::Result;
@@ -49,7 +50,11 @@ pub fn run(args: &[String]) -> Result<()> {
                 "serverInfo": { "name": "kuterlapa", "version": env!("CARGO_PKG_VERSION") },
             })),
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tools.iter().map(Tool::schema).collect::<Vec<_>>() })),
+            "tools/list" => {
+                let mut list: Vec<Value> = tools.iter().map(Tool::schema).collect();
+                list.extend(computer::schemas());
+                Ok(json!({ "tools": list }))
+            }
             "tools/call" => Ok(call(&tools, &params)),
             other => Err((-32601, format!("unknown method {other}"))),
         };
@@ -72,6 +77,11 @@ fn call(tools: &[Tool], params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let empty = Map::new();
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);
+    if computer::has(name) && !tools.iter().any(|t| t.name == name) {
+        eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
+        let (content, ok) = computer::call(name, arguments);
+        return json!({ "content": content, "isError": !ok });
+    }
     let Some(tool) = tools.iter().find(|t| t.name == name) else {
         return result(format!("no tool named {name}"), false);
     };
