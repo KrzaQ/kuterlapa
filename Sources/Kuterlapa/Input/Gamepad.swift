@@ -77,9 +77,11 @@ final class Gamepad {
 
     private static func name(of element: GCControllerElement) -> String {
         let name = (element.localizedName ?? "?").replacingOccurrences(of: " Button", with: "")
+        // macOS names the stick buttons "Left Stick Button" on a Switch Pro
+        // Controller and "Left Thumbstick Button" on others.
         switch name {
-        case "Left Thumbstick": return "L3"
-        case "Right Thumbstick": return "R3"
+        case "Left Thumbstick", "Left Stick": return "L3"
+        case "Right Thumbstick", "Right Stick": return "R3"
         default: return name
         }
     }
