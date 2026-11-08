@@ -7,6 +7,8 @@
 //!   kuterlapa press <button>    act as if a controller button was pressed
 //!   kuterlapa speech <request>  send "toggle" or "cancel" to the speech
 //!                               provider
+//!   kuterlapa ask <text>        send a typed message to the conversation
+//!                               (for tests: no speech needed)
 //!   kuterlapa say <text>        read text aloud with the voice provider
 //!   kuterlapa voice <request>   send "stop" or "status" to the voice
 //!                               provider
@@ -39,7 +41,7 @@ mod voice;
 
 use anyhow::{bail, Result};
 
-const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] | press <button> | speech <request> | say <text> | voice <request> | type <text> | key <combo> | status";
+const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] | press <button> | speech <request> | ask <text> | say <text> | voice <request> | type <text> | key <combo> | status";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -52,7 +54,7 @@ fn main() -> Result<()> {
         "daemon" => return daemon::run(config::load()?),
         "mcp" => return mcp::run(rest_args),
         "press" => format!("button {rest}"),
-        "speech" | "say" | "voice" | "type" | "key" => format!("{command} {rest}"),
+        "speech" | "say" | "voice" | "type" | "key" | "ask" => format!("{command} {rest}"),
         "status" => "status".to_string(),
         _ => bail!(USAGE),
     };

@@ -164,6 +164,11 @@ fn handle(state: &State, line: &str) -> String {
             });
             "ok".into()
         }
+        // A typed chat message, for tests: it answers once the model has.
+        "ask" => {
+            state.chat.ask_text(argument);
+            "ok".into()
+        }
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),
