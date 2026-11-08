@@ -13,6 +13,10 @@ use std::time::{Duration, Instant};
 
 pub const DOUBLE_WINDOW: Duration = Duration::from_millis(300);
 pub const HOLD_TIME: Duration = Duration::from_millis(500);
+/// A press this soon after a release is a bounce of the button, not a
+/// second press: no person presses that fast. A Switch Pro controller
+/// sometimes reports one press as two, which turned Y into "Y double".
+pub const BOUNCE: Duration = Duration::from_millis(40);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gesture {
@@ -48,6 +52,9 @@ struct ButtonState {
     waiting_double: bool,
     /// Bumped on every press and release, so stale timers do nothing.
     generation: u64,
+    released_at: Option<Instant>,
+    /// The current press is a bounce; its release does nothing either.
+    bounce: bool,
 }
 
 pub struct Recognizer {
@@ -64,11 +71,19 @@ impl Recognizer {
         let fire_now = {
             let mut buttons = self.buttons.lock().unwrap();
             let state = buttons.entry(button.to_string()).or_default();
+            let gap = state.released_at.map(|t| t.elapsed());
+            if state.waiting_double && gap.is_some_and(|g| g < BOUNCE) {
+                // Leave the state and its timer as they are.
+                eprintln!("{button}: bounce after {} ms, ignored", gap.unwrap_or_default().as_millis());
+                state.bounce = true;
+                return;
+            }
             state.generation += 1;
             state.down_since = Some(Instant::now());
             if state.waiting_double {
                 state.waiting_double = false;
                 state.consumed = true;
+                eprintln!("{button}: second press {} ms after the first ended", gap.unwrap_or_default().as_millis());
                 Some(Gesture::Double)
             } else if !has.double && !has.hold {
                 state.consumed = true;
@@ -90,8 +105,13 @@ impl Recognizer {
         let fire_now = {
             let mut buttons = self.buttons.lock().unwrap();
             let state = buttons.entry(button.to_string()).or_default();
+            if state.bounce {
+                state.bounce = false;
+                return;
+            }
             state.generation += 1;
             state.down_since = None;
+            state.released_at = Some(Instant::now());
             if state.consumed {
                 state.consumed = false;
                 None
@@ -165,11 +185,24 @@ mod tests {
     }
 
     #[test]
+    fn bounce_is_one_press() {
+        let has = Has { double: true, hold: true };
+        let (r, log) = recorder();
+        r.press("Y", has);
+        r.release("Y", has);
+        r.press("Y", has); // a bounce, a few ms later
+        r.release("Y", has);
+        thread::sleep(DOUBLE_WINDOW + Duration::from_millis(100));
+        assert_eq!(*log.lock().unwrap(), vec![("Y".into(), Gesture::Single)]);
+    }
+
+    #[test]
     fn double_and_single_and_hold() {
         let has = Has { double: true, hold: true };
         let (r, log) = recorder();
         r.press("X", has);
         r.release("X", has);
+        thread::sleep(BOUNCE + Duration::from_millis(20));
         r.press("X", has);
         r.release("X", has);
         thread::sleep(DOUBLE_WINDOW + Duration::from_millis(100));
