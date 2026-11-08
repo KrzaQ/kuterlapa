@@ -1,0 +1,38 @@
+//! Settings in ~/.config/kuterlapa/config.toml. Every key is optional.
+//!
+//!   [speech]
+//!   # The speech provider: a program that speaks the speech protocol
+//!   # (docs/protocol.md). Empty disables speech.
+//!   command = ["~/.local/bin/kuterlapa-speech"]
+
+use crate::paths;
+use anyhow::{Context, Result};
+use serde::Deserialize;
+use std::fs;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Config {
+    pub speech: Speech,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Speech {
+    pub command: Vec<String>,
+}
+
+impl Default for Speech {
+    fn default() -> Self {
+        Speech { command: vec!["~/.local/bin/kuterlapa-speech".into()] }
+    }
+}
+
+pub fn load() -> Result<Config> {
+    let path = paths::config_dir().join("config.toml");
+    if !path.exists() {
+        return Ok(Config::default());
+    }
+    let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+}
