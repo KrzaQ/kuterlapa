@@ -7,13 +7,16 @@ import AppKit
 ///   key <combo>    press a key combination, for example "key Return"
 ///   erase <n>      press Backspace n times
 ///   overlay <json> show the overlay with this state, or hide it
+///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
+///   mouse <what>   click, double-click or right-click at the pointer
 ///   frontmost      the bundle identifier of the application in front
 ///   status         one line with the app state
 ///
 /// The answer is "ok", a status line, or "error: ...".
 enum ShellCommands {
-    /// Set by the app delegate once the overlay exists.
+    /// Set by the app delegate once they exist.
     static var overlay: OverlayPanel?
+    static var sticks: Sticks?
 
     static func handle(_ line: String) -> String {
         let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
@@ -30,6 +33,12 @@ enum ShellCommands {
             else { return "error: bad overlay state" }
             overlay?.update(state)
             return "ok"
+        case "sticks":
+            guard let data = argument.data(using: .utf8),
+                  let roles = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return "error: bad sticks settings" }
+            sticks?.configure(roles)
+            return "ok"
         default:
             break
         }
@@ -41,6 +50,14 @@ enum ShellCommands {
         case "key":
             guard let combo = KeyCombo(argument) else { return "error: bad key \(argument)" }
             Keystrokes.press(combo)
+            return "ok"
+        case "mouse":
+            switch argument {
+            case "click": Mouse.click()
+            case "double-click": Mouse.click(count: 2)
+            case "right-click": Mouse.click(.right)
+            default: return "error: unknown mouse action \(argument)"
+            }
             return "ok"
         case "erase":
             guard let count = Int(argument), count >= 0, let backspace = KeyCombo("Backspace") else {

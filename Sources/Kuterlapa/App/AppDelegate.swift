@@ -6,7 +6,7 @@ import AppKit
 /// each button does.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let core = CoreProcess()
-    private lazy var gamepad = Gamepad { [weak self] in self?.pressed($0) }
+    private lazy var gamepad = Gamepad { [weak self] name, pressed in self?.button(name, pressed) }
     private let shell = SocketServer(path: Paths.shellSocket.path, handler: ShellCommands.handle)
     private var statusMenu: StatusMenu?
 
@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Paths.ensureDirectories()
         log("Kuterlapa started")
         ShellCommands.overlay = OverlayPanel()
+        ShellCommands.sticks = Sticks(gamepad: gamepad)
         log("accessibility: \(Keystrokes.requestPermission())")
         shell.start()
         core.start()
@@ -29,11 +30,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The core may type or press keys in answer, through this app's own
-    /// socket, so the request must not wait on the main thread.
-    private func pressed(_ button: String) {
-        DispatchQueue.global(qos: .userInteractive).async { [core] in
-            let answer = core.send("button \(button)") ?? "no answer from core"
-            if answer != "ok" { log("\(button): \(answer)") }
+    /// socket, so the request must not wait on the main thread. A serial
+    /// queue keeps each press before its release.
+    private let toCore = DispatchQueue(label: "kuterlapa.buttons", qos: .userInteractive)
+
+    private func button(_ name: String, _ pressed: Bool) {
+        toCore.async { [core] in
+            let request = "\(pressed ? "press" : "release") \(name)"
+            let answer = core.send(request) ?? "no answer from core"
+            if answer != "ok" { log("\(request): \(answer)") }
         }
     }
 
