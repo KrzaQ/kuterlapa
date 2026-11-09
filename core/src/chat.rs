@@ -17,6 +17,7 @@
 //! While a command's answer is on screen, the next command continues it
 //! as a thread. Closing the answer, or a long pause, starts a new thread.
 
+use crate::activity::{self, Activity, StepState};
 use crate::hooks::{self, Flag};
 use crate::memory;
 use crate::profiles::Current;
@@ -103,6 +104,9 @@ struct State {
     /// While the user pauses: when the message sends itself (Unix time in
     /// seconds) and how long the countdown is.
     countdown: Option<(f64, f64)>,
+    /// What the model does for the current question, or did for the last
+    /// answer: thinking, tool calls, tokens.
+    activity: Option<Activity>,
 }
 
 pub struct Chat {
@@ -216,6 +220,7 @@ impl Chat {
             s.busy = true;
             s.question = question.clone();
             s.answer.clear();
+            s.activity = None;
             (s.mode, question, s.thread)
         };
         self.show();
@@ -258,6 +263,10 @@ impl Chat {
         let profile = self.profiles.get();
         let voice = self.state.lock().unwrap().voice;
         let system = system_prompt(mode, &session, voice);
+        let progress = |activity: &Activity| {
+            self.state.lock().unwrap().activity = Some(activity.clone());
+            self.show();
+        };
         match mode {
             Mode::Conversation => {
                 let conversation = self.store.current_conversation(&session.name)?;
@@ -265,7 +274,7 @@ impl Chat {
                 self.store.add_message(conversation, "user", question, None)?;
                 crate::view::changed();
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
                 self.store.add_message(conversation, "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, None))
             }
@@ -277,7 +286,7 @@ impl Chat {
                 let thread = self.store.add_command(thread, Some(&session.name), "user", question, None)?;
                 crate::view::changed();
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
                 self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name))?;
                 Ok((answer, Some(thread)))
             }
@@ -493,8 +502,9 @@ impl Chat {
         let session = sessions::current_name();
         let s = self.state.lock().unwrap();
         // The chat view shows the conversation itself; the overlay only
-        // shows a recording (what the user says, the pause countdown).
-        if crate::view::is_open() && !s.recording && s.note.is_none() {
+        // shows a recording (what the user says, the pause countdown) and
+        // the model's work until its answer.
+        if crate::view::is_open() && !s.recording && !s.busy && s.note.is_none() {
             drop(s);
             shell::overlay(&json!({ "visible": false }));
             return;
@@ -523,7 +533,10 @@ impl Chat {
         } else if s.recording {
             "Słucham…".into()
         } else if s.busy {
-            format!("{profile} myśli…")
+            match &s.activity {
+                Some(a) => format!("{profile} myśli… {} s · {}", a.started.elapsed().as_secs(), token_line(a)),
+                None => format!("{profile} myśli…"),
+            }
         } else if let Some(e) = &s.error {
             format!("Błąd: {e}")
         } else {
@@ -557,6 +570,20 @@ impl Chat {
         });
         if s.mode == Mode::Command {
             state["frame"] = json!("dashed");
+        }
+        // While the model works: its tool calls and its latest thinking,
+        // small. After the answer: how much work it was.
+        if let Some(a) = s.activity.as_ref().filter(|_| s.visible && !s.recording) {
+            if s.busy {
+                state["activity"] = activity_lines(a);
+            } else if s.error.is_none() && !s.answer.is_empty() {
+                let mut parts = vec![token_line(a)];
+                if !a.steps.is_empty() {
+                    parts.push(tool_count(a.steps.len()));
+                }
+                parts.push(format!("{} s", a.finished.unwrap_or_else(|| a.started.elapsed()).as_secs()));
+                state["detail"] = json!(parts.join(" · "));
+            }
         }
         if let Some((ends, total)) = s.countdown {
             state["countdown"] = json!({ "ends": ends, "total": total });
@@ -639,4 +666,43 @@ fn for_speech(text: &str) -> String {
         out.push(' ');
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// How many steps of the work the overlay shows: the latest ones.
+const STEPS: usize = 5;
+
+/// The overlay's "activity": tool calls, then the thinking.
+fn activity_lines(a: &Activity) -> serde_json::Value {
+    let mut lines = Vec::new();
+    let skipped = a.steps.len().saturating_sub(STEPS);
+    if skipped > 0 {
+        lines.push(json!({ "kind": "more", "text": format!("… i {} wcześniej", tool_count(skipped)) }));
+    }
+    for step in &a.steps[skipped..] {
+        let state = match step.state {
+            StepState::Running => "running",
+            StepState::Done => "done",
+            StepState::Failed => "failed",
+        };
+        lines.push(json!({ "kind": "tool", "state": state, "name": step.name, "text": step.detail }));
+    }
+    let thinking = a.thinking.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !thinking.is_empty() {
+        lines.push(json!({ "kind": "thinking", "text": thinking }));
+    }
+    json!(lines)
+}
+
+fn token_line(a: &Activity) -> String {
+    format!("tokeny: {} wej. · {} wyj.", activity::tokens(a.input), activity::tokens(a.output()))
+}
+
+/// "1 narzędzie", "3 narzędzia", "5 narzędzi".
+fn tool_count(n: usize) -> String {
+    let word = match (n % 10, n % 100) {
+        _ if n == 1 => "narzędzie",
+        (2..=4, d) if !(12..=14).contains(&d) => "narzędzia",
+        _ => "narzędzi",
+    };
+    format!("{n} {word}")
 }

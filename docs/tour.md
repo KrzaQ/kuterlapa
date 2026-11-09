@@ -23,6 +23,12 @@ local model through `pi`) in the current session. The badge **ROZMOWA**
 are Markdown: bold text, lists and code show as such. The title shows the
 session and the model profile.
 
+While the model works, the overlay shows what it does, in small text: each
+tool call with its arguments (⋯ running, ✓ done, ✗ failed), the latest part
+of its thinking, the seconds and the tokens so far. Tokens "wej." are what
+the model read, all its calls together; "wyj." are what it wrote. After the
+answer, one small line keeps the totals.
+
 ### A one-off command
 
 ![A one-off command in the overlay](screenshots/command.png)

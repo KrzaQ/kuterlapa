@@ -13,6 +13,8 @@ final class OverlayPanel {
     private let textLabel = OverlayPanel.label(size: 15, weight: .regular, color: .labelColor)
     private let hintLabel = OverlayPanel.label(size: 11, weight: .regular, color: .tertiaryLabelColor)
     private let detailLabel = OverlayPanel.label(size: 12, weight: .regular, color: .secondaryLabelColor)
+    /// What the model does while it works: tool calls and thinking, small.
+    private let activityLabel = OverlayPanel.label(size: 11, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
     private let countdownBar = CountdownBar()
     private let badge = Badge()
@@ -69,7 +71,7 @@ final class OverlayPanel {
         titleRow.spacing = 8
         badge.isHidden = true
 
-        let stack = NSStackView(views: [titleRow, statusLabel, countdownBar, headingLabel, textLabel, detailLabel,
+        let stack = NSStackView(views: [titleRow, statusLabel, countdownBar, headingLabel, textLabel, activityLabel, detailLabel,
                                         helpView, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -140,6 +142,11 @@ final class OverlayPanel {
     ///             {"key": "B", "label": "Nie", "tone": "no"}],
     /// "attention": true
     ///
+    /// While a model works, what it does, small, below the text:
+    /// "activity": [{"kind": "tool", "state": "running" | "done" | "failed",
+    ///               "name": "chrome_tabs", "text": "<arguments>"},
+    ///              {"kind": "thinking", "text": "..."}, {"kind": "more", "text": "..."}]
+    ///
     /// While the user pauses in a chat message, a bar shrinks until the
     /// message sends itself: "countdown": {"ends": <Unix time>, "total": <s>}.
     ///
@@ -159,6 +166,7 @@ final class OverlayPanel {
         let text = state["text"] as? String ?? ""
         textLabel.attributedStringValue = Markdown.render(text, size: 15 * scale, color: .labelColor)
         textLabel.isHidden = text.isEmpty
+        setActivity(state["activity"] as? [[String: Any]] ?? [])
         set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
         let help = state["help"] as? [[String: Any]] ?? []
@@ -201,7 +209,7 @@ final class OverlayPanel {
 
     private func setWidth(_ value: CGFloat) {
         widthConstraint.constant = value
-        for label in [titleLabel, statusLabel, headingLabel, textLabel, detailLabel, hintLabel] {
+        for label in [titleLabel, statusLabel, headingLabel, textLabel, activityLabel, detailLabel, hintLabel] {
             label.preferredMaxLayoutWidth = value - 28
         }
     }
@@ -340,6 +348,45 @@ final class OverlayPanel {
             label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
         ])
         return box
+    }
+
+    private func setActivity(_ lines: [[String: Any]]) {
+        activityLabel.isHidden = lines.isEmpty
+        guard !lines.isEmpty else { return }
+        let size = 11 * scale
+        let plain = NSFont.systemFont(ofSize: size)
+        let mono = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        let bold = NSFont.monospacedSystemFont(ofSize: size, weight: .semibold)
+        let italic = NSFontManager.shared.convert(plain, toHaveTrait: .italicFontMask)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = 3 * scale
+        let out = NSMutableAttributedString()
+        func add(_ text: String, _ font: NSFont, _ color: NSColor) {
+            out.append(NSAttributedString(string: text, attributes: [
+                .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
+            ]))
+        }
+        for (i, line) in lines.enumerated() {
+            if i > 0 { add("\n", plain, .secondaryLabelColor) }
+            let text = line["text"] as? String ?? ""
+            switch line["kind"] as? String {
+            case "tool":
+                let (mark, color): (String, NSColor) = switch line["state"] as? String {
+                case "done": ("✓", .systemGreen)
+                case "failed": ("✗", .systemRed)
+                default: ("⋯", .systemOrange)
+                }
+                add("\(mark) ", bold, color)
+                add(line["name"] as? String ?? "", bold, .labelColor.withAlphaComponent(0.8))
+                if !text.isEmpty { add("  \(text)", mono, .secondaryLabelColor) }
+            case "thinking":
+                add("💭 ", plain, .secondaryLabelColor)
+                add(text, italic, .secondaryLabelColor)
+            default:
+                add(text, plain, .tertiaryLabelColor)
+            }
+        }
+        activityLabel.attributedStringValue = out
     }
 
     private func set(_ label: NSTextField, _ value: Any?) {

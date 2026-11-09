@@ -4,10 +4,12 @@
 //! with --mcp-config, pi with a small extension (pi-tools.ts). Claude also
 //! gets web search.
 
+use crate::activity::Activity;
 use crate::paths;
 use crate::profiles::Profile;
 use anyhow::{bail, Context, Result};
 use serde_json::json;
+use std::io::{BufRead, BufReader, Read};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -68,19 +70,24 @@ pub fn is_cancelled(error: &anyhow::Error) -> bool {
 
 /// One request without tools.
 pub fn complete(profile: &Profile, system: &str, user: &str) -> Result<String> {
-    complete_in(profile, system, user, None, None)
+    complete_in(profile, system, user, None, None, &|_| {})
 }
 
 /// Like `complete`, run in `folder`: the engine then reads that project's
 /// CLAUDE.md or AGENTS.md. Without a folder it runs outside any project, so
 /// no project changes the answer. With `tools`, the model may use the
 /// global tools and those of the named session.
+///
+/// The engine writes its work as a stream of events. `progress` gets what
+/// it does while it runs (thinking, tool calls, tokens), at most ten times
+/// a second, and once more at the end.
 pub fn complete_in(
     profile: &Profile,
     system: &str,
     user: &str,
     folder: Option<&Path>,
     tools: Option<&str>,
+    progress: &dyn Fn(&Activity),
 ) -> Result<String> {
     let mut command = match profile.engine.as_str() {
         "claude" => claude(profile, system, user, folder.is_some(), tools),
@@ -93,10 +100,32 @@ pub fn complete_in(
     // Its own process group: cancelling stops the engine together with its
     // tool server and any tool it runs.
     command.process_group(0);
-    let child = command.spawn().with_context(|| format!("starting {}", profile.engine))?;
+    let mut child = command.spawn().with_context(|| format!("starting {}", profile.engine))?;
     let pid = child.id();
     RUNNING.lock().unwrap().push(Running { pid, cancelled: false });
-    let output = child.wait_with_output();
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let errors = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text);
+        text
+    });
+    let mut activity = Activity::default();
+    let mut shown = std::time::Instant::now();
+    let mut steps = 0;
+    for line in BufReader::new(child.stdout.take().expect("piped stdout")).lines() {
+        let Ok(line) = line else { break };
+        if activity.line(&profile.engine, &line)
+            && (shown.elapsed() >= Duration::from_millis(100) || activity.steps.len() != steps)
+        {
+            progress(&activity);
+            shown = std::time::Instant::now();
+            steps = activity.steps.len();
+        }
+    }
+    activity.finished = Some(activity.started.elapsed());
+    progress(&activity);
+    let status = child.wait();
+    let errors = errors.join().unwrap_or_default();
     let cancelled = {
         let mut running = RUNNING.lock().unwrap();
         let cancelled = running.iter().any(|r| r.pid == pid && r.cancelled);
@@ -106,12 +135,14 @@ pub fn complete_in(
     if cancelled {
         bail!(Cancelled);
     }
-    let output = output.with_context(|| format!("waiting for {}", profile.engine))?;
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        bail!("{} failed: {}", profile.engine, error.trim());
+    let status = status.with_context(|| format!("waiting for {}", profile.engine))?;
+    if let Some(error) = activity.error {
+        bail!("{} failed: {error}", profile.engine);
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    if !status.success() {
+        bail!("{} failed: {}", profile.engine, errors.trim());
+    }
+    activity.answer.with_context(|| format!("{} gave no answer: {}", profile.engine, errors.trim()))
 }
 
 /// `project`: keep Claude Code's own system prompt and the project's
@@ -119,6 +150,10 @@ pub fn complete_in(
 fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
     let mut c = Command::new("claude");
     c.args(["-p", "--model", &profile.model, "--no-session-persistence"]);
+    // Events while it works; the thinking as a summary (Claude Code leaves
+    // it out by default).
+    c.args(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+    c.args(["--thinking-display", "summarized"]);
     match tools.and_then(|session| mcp_config(session, profile.local)) {
         // Claude Code's own tools stay off (no shell, no files) except web
         // search. Its permission classifier ("auto") judges each tool call;
@@ -141,7 +176,7 @@ fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Opt
 
 fn pi(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
     let mut c = Command::new("pi");
-    c.args(["-p", "--no-session", "--model", &profile.model]);
+    c.args(["-p", "--no-session", "--model", &profile.model, "--mode", "json"]);
     let extension = tools.and_then(|_| pi_extension());
     match (tools, extension, std::env::current_exe()) {
         // Only the Kuterlapa tools: no shell, no files. The extension
