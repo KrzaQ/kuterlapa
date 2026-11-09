@@ -1,0 +1,17 @@
+description = "Read the page in a Chrome tab as text: its title, address and visible text. Faster and more exact than a screenshot. Window and tab come from chrome_tabs; 0 and 0 mean the front window's active tab."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "read", "{window}", "{tab}", "{chars}"]
+timeout = 20
+read_only = true
+
+[params.window]
+type = "integer"
+description = "Window number, or 0 for the front window"
+
+[params.tab]
+type = "integer"
+description = "Tab number, or 0 for the active tab"
+
+[params.chars]
+type = "integer"
+description = "How much text, default 6000, at most 30000"
+required = false

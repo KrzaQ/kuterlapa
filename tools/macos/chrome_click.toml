@@ -1,0 +1,15 @@
+description = "Click a button or link of a Chrome page, by its number from chrome_fields."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "click", "{window}", "{tab}", "{element}"]
+timeout = 20
+
+[params.window]
+type = "integer"
+description = "Window number, or 0 for the front window"
+
+[params.tab]
+type = "integer"
+description = "Tab number, or 0 for the active tab"
+
+[params.element]
+type = "integer"
+description = "The element's number from chrome_fields"

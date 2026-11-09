@@ -1,0 +1,22 @@
+description = "Put text into a field of a Chrome page, by its number from chrome_fields, as typing would (the page notices it); with submit = \"submit\", also send the field's form (like pressing Enter). It refuses password fields: the user types passwords. Never fill card numbers or other secrets."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "fill", "{window}", "{tab}", "{field}", "{text}", "{submit}"]
+timeout = 20
+
+[params.window]
+type = "integer"
+description = "Window number, or 0 for the front window"
+
+[params.tab]
+type = "integer"
+description = "Tab number, or 0 for the active tab"
+
+[params.field]
+type = "integer"
+description = "The field's number from chrome_fields"
+
+[params.text]
+description = "The text to put in"
+
+[params.submit]
+description = "\"submit\" to send the form afterwards"
+required = false
