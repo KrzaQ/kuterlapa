@@ -226,6 +226,7 @@ impl Chat {
         self.show();
         hooks::set(Flag::Thinking, true);
         let result = self.ask(mode, &question, thread);
+        crate::view::work(None);
         crate::view::changed();
         let speak = {
             let mut s = self.state.lock().unwrap();
@@ -266,16 +267,21 @@ impl Chat {
         let progress = |activity: &Activity| {
             self.state.lock().unwrap().activity = Some(activity.clone());
             self.show();
+            let mut work = activity.to_json(true);
+            work["profile"] = json!(profile.name);
+            crate::view::work(Some(work));
         };
+        // What the model did, saved with its answer.
+        let work = || self.state.lock().unwrap().activity.as_ref().map(|a| a.to_json(false).to_string());
         match mode {
             Mode::Conversation => {
                 let conversation = self.store.current_conversation(&session.name)?;
                 let history = self.store.messages(conversation, HISTORY)?;
-                self.store.add_message(conversation, "user", question, None)?;
+                self.store.add_message(conversation, "user", question, None, None)?;
                 crate::view::changed();
                 let answer =
                     engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
-                self.store.add_message(conversation, "assistant", &answer, Some(&profile.name))?;
+                self.store.add_message(conversation, "assistant", &answer, Some(&profile.name), work().as_deref())?;
                 Ok((answer, None))
             }
             Mode::Command => {
@@ -283,11 +289,11 @@ impl Chat {
                     Some(t) => self.store.thread(t)?,
                     None => Vec::new(),
                 };
-                let thread = self.store.add_command(thread, Some(&session.name), "user", question, None)?;
+                let thread = self.store.add_command(thread, Some(&session.name), "user", question, None, None)?;
                 crate::view::changed();
                 let answer =
                     engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
-                self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name))?;
+                self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name), work().as_deref())?;
                 Ok((answer, Some(thread)))
             }
         }
@@ -502,9 +508,9 @@ impl Chat {
         let session = sessions::current_name();
         let s = self.state.lock().unwrap();
         // The chat view shows the conversation itself; the overlay only
-        // shows a recording (what the user says, the pause countdown) and
-        // the model's work until its answer.
-        if crate::view::is_open() && !s.recording && !s.busy && s.note.is_none() {
+        // shows a recording (what the user says, the pause countdown). The
+        // view shows the model's work itself.
+        if crate::view::is_open() && !s.recording && s.note.is_none() {
             drop(s);
             shell::overlay(&json!({ "visible": false }));
             return;
@@ -686,7 +692,7 @@ fn activity_lines(a: &Activity) -> serde_json::Value {
         };
         lines.push(json!({ "kind": "tool", "state": state, "name": step.name, "text": step.detail }));
     }
-    let thinking = a.thinking.split_whitespace().collect::<Vec<_>>().join(" ");
+    let thinking = activity::tail(&a.thinking, 320).split_whitespace().collect::<Vec<_>>().join(" ");
     if !thinking.is_empty() {
         lines.push(json!({ "kind": "thinking", "text": thinking }));
     }

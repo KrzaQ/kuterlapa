@@ -61,10 +61,19 @@ pub struct FullMessage {
     pub text: String,
     pub profile: Option<String>,
     pub created: String,
+    /// What the model did for this answer (JSON), if it was saved.
+    pub work: Option<String>,
 }
 
 fn full_message(r: &rusqlite::Row) -> rusqlite::Result<FullMessage> {
-    Ok(FullMessage { id: r.get(0)?, role: r.get(1)?, text: r.get(2)?, profile: r.get(3)?, created: r.get(4)? })
+    Ok(FullMessage {
+        id: r.get(0)?,
+        role: r.get(1)?,
+        text: r.get(2)?,
+        profile: r.get(3)?,
+        created: r.get(4)?,
+        work: r.get(5)?,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +89,16 @@ impl Store {
         let path = dir.join("kuterlapa.db");
         let db = Connection::open(&path).with_context(|| format!("opening {}", path.display()))?;
         db.execute_batch(SCHEMA)?;
+        // Added later: what the model did for an answer (JSON: tokens,
+        // seconds, tool calls), for the chat view.
+        for table in ["messages", "commands"] {
+            let has: bool = db
+                .prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = 'work'"))?
+                .exists([])?;
+            if !has {
+                db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN work TEXT"))?;
+            }
+        }
         db.execute(
             "DELETE FROM commands WHERE created < datetime('now', ?1)",
             params![format!("-{COMMAND_DAYS} days")],
@@ -114,11 +133,18 @@ impl Store {
         Ok(db.last_insert_rowid())
     }
 
-    pub fn add_message(&self, conversation: i64, role: &str, text: &str, profile: Option<&str>) -> Result<()> {
+    pub fn add_message(
+        &self,
+        conversation: i64,
+        role: &str,
+        text: &str,
+        profile: Option<&str>,
+        work: Option<&str>,
+    ) -> Result<()> {
         let db = self.db.lock().unwrap();
         db.execute(
-            "INSERT INTO messages (conversation, role, text, profile) VALUES (?1, ?2, ?3, ?4)",
-            params![conversation, role, text, profile],
+            "INSERT INTO messages (conversation, role, text, profile, work) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![conversation, role, text, profile, work],
         )?;
         db.execute("UPDATE conversations SET updated = datetime('now') WHERE id = ?1", params![conversation])?;
         Ok(())
@@ -156,8 +182,8 @@ impl Store {
     pub fn messages_full(&self, conversation: i64, limit: usize) -> Result<Vec<FullMessage>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime') FROM (
-                 SELECT id, role, text, profile, created FROM messages WHERE conversation = ?1
+            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime'), work FROM (
+                 SELECT id, role, text, profile, created, work FROM messages WHERE conversation = ?1
                  ORDER BY id DESC LIMIT ?2)
              ORDER BY id",
         )?;
@@ -181,7 +207,7 @@ impl Store {
     pub fn thread_full(&self, thread: i64) -> Result<Vec<FullMessage>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime')
+            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime'), work
              FROM commands WHERE thread = ?1 ORDER BY id",
         )?;
         let rows = stmt.query_map(params![thread], full_message)?;
@@ -261,11 +287,13 @@ impl Store {
         role: &str,
         text: &str,
         profile: Option<&str>,
+        work: Option<&str>,
     ) -> Result<i64> {
         let db = self.db.lock().unwrap();
         db.execute(
-            "INSERT INTO commands (thread, context_session, role, text, profile) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![thread.unwrap_or(0), session, role, text, profile],
+            "INSERT INTO commands (thread, context_session, role, text, profile, work)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![thread.unwrap_or(0), session, role, text, profile, work],
         )?;
         let id = db.last_insert_rowid();
         let thread = thread.unwrap_or(id);

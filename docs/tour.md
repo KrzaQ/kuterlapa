@@ -85,3 +85,8 @@ the sessions and, below them, the session's conversations and commands.
 The controller works in it: up and down scroll, left and right go to older
 and newer conversations, B closes it. A model can also open it at a past
 message it found by meaning ("show me where we talked about …").
+
+The overlay stays hidden while the chat view is open. The view shows the
+model's work itself: below the question, a card lists the tool calls with
+their arguments and the start of each result, the thinking, the tokens and
+the seconds. Each answer keeps its totals and its tool calls below it.

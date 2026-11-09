@@ -125,6 +125,49 @@ header #where { margin: 0.2em 0 0; }
 .body blockquote { margin: 0.5em 0; padding-left: 0.9em; border-left: 3px solid var(--line); color: var(--muted); }
 .katex-display { overflow-x: auto; overflow-y: hidden; }
 
+/* What the model did: small, below its answer, or live while it works. */
+.work { margin-top: 0.5em; font-size: 0.72em; color: var(--muted); }
+.work .summary .tokens { color: var(--text); font-variant-numeric: tabular-nums; }
+.work .failed { color: #e5534b; }
+.work .steps { list-style: none; margin: 0.35em 0 0; padding: 0; }
+.work .steps li {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.95em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0.1em 0;
+}
+.work .steps .mark { display: inline-block; width: 1.4em; font-weight: 700; }
+.work .steps .done .mark { color: #57ab5a; }
+.work .steps .failed .mark { color: #e5534b; }
+.work .steps .running .mark { color: var(--accent); }
+.work .steps .name { color: var(--text); font-weight: 600; }
+.work .steps .result { opacity: 0.75; }
+.work.done { border-top: 1px solid var(--line); padding-top: 0.4em; opacity: 0.8; }
+
+.message.working .meta { color: var(--accent); }
+.message.working .work {
+  font-size: 0.85em;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.7em 1em;
+}
+.message.working .thinking {
+  margin-top: 0.6em;
+  max-height: 9em;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font-style: italic;
+  line-height: 1.45;
+}
+/* Only its end fits: the start fades out. */
+.message.working .thinking.clipped { -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 2.5em); }
+
 .empty { color: var(--muted); margin-top: 3em; text-align: center; }
 
 body.backdrop aside, body.backdrop main { visibility: hidden; }

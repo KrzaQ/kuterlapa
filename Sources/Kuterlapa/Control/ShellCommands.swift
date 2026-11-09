@@ -10,6 +10,8 @@ import AppKit
 ///   overlay-scale <f> the size of the overlay and its text (1 is normal)
 ///   view <json>    show the large chat view with this state, or hide it
 ///   view-scroll <how>  scroll it: page-up, page-down, top, bottom, or pixels
+///   view-work <json>   what the model does right now, below the last
+///                      message (null: it has finished)
 ///   panel-windows  "overlay=<n> view=<n> overlay-place=<x,y,w,h>": window
 ///                  numbers and the overlay's place, for screenshots
 ///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
@@ -77,6 +79,9 @@ enum ShellCommands {
                 + "overlay-place=\(overlay?.place ?? "")"
         case "view-scroll":
             chatView?.scroll(argument)
+            return "ok"
+        case "view-work":
+            chatView?.work(argument)
             return "ok"
         case "overlay-scale":
             guard let value = Double(argument) else { return "error: bad scale \(argument)" }

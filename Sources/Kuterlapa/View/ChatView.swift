@@ -72,6 +72,12 @@ final class ChatView: NSObject, WKNavigationDelegate {
         web.evaluateJavaScript("window.kuterlapa.scroll(\(argument))")
     }
 
+    /// The model's work while it answers (JSON from the core, or null).
+    func work(_ json: String) {
+        guard loaded, isVisible else { return }
+        web.evaluateJavaScript("window.kuterlapa.work(\(json))")
+    }
+
     private func render(_ json: String) {
         web.evaluateJavaScript("window.kuterlapa.render(\(json))") { _, error in
             if let error { NSLog("chat view: \(error)") }

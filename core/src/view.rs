@@ -149,6 +149,15 @@ pub fn changed() {
     send(view, true);
 }
 
+/// What the model does right now, below the last message (`None`: it has
+/// finished). The core sends it often, so it goes apart from the whole
+/// view: "view-work <json>".
+pub fn work(state: Option<serde_json::Value>) {
+    if is_open() {
+        shell::send(&format!("view-work {}", state.unwrap_or(serde_json::Value::Null)));
+    }
+}
+
 fn send(view: &View, follow: bool) {
     let (session_name, back, focus) = {
         let position = view.position.lock().unwrap();
@@ -190,7 +199,10 @@ fn send(view: &View, follow: bool) {
         .collect();
     let messages: Vec<_> = messages
         .into_iter()
-        .map(|m| json!({ "role": m.role, "text": m.text, "profile": m.profile, "created": m.created }))
+        .map(|m| {
+            let work = m.work.as_deref().and_then(|w| serde_json::from_str::<serde_json::Value>(w).ok());
+            json!({ "role": m.role, "text": m.text, "profile": m.profile, "created": m.created, "work": work })
+        })
         .collect();
     let current = sessions::current_name();
     let sessions_list: Vec<_> = sessions::recent()

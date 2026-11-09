@@ -3,11 +3,15 @@
 //! --output-format stream-json`, `pi --mode json`). `Activity` reads them
 //! line by line, so the overlay can show the work while it happens.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
-/// How many characters of the thinking the overlay shows: the latest part.
-const THINKING: usize = 320;
+/// How many characters of the thinking to keep: the latest part. The chat
+/// view shows all of it, the overlay less (`tail`).
+const THINKING: usize = 1200;
+
+/// How many characters of a tool's result to keep.
+const RESULT: usize = 90;
 
 /// The prefix of Kuterlapa's own tools in the engines' tool names.
 const OURS: [&str; 2] = ["mcp__kuterlapa__", "kuterlapa__"];
@@ -27,6 +31,8 @@ pub struct Step {
     /// The arguments, short.
     pub detail: String,
     pub state: StepState,
+    /// The start of the result, in one line.
+    pub result: String,
 }
 
 #[derive(Clone, Debug)]
@@ -89,18 +95,58 @@ impl Activity {
     fn think(&mut self, text: &str) {
         self.thinking.push_str(text);
         self.output_chars += text.len();
-        if self.thinking.chars().count() > THINKING * 2 {
+        if self.thinking.chars().count() > THINKING * 3 / 2 {
             self.thinking = tail(&self.thinking, THINKING);
         }
     }
 
     fn start_step(&mut self, id: &str, name: &str) {
         let name = OURS.iter().fold(name, |n, prefix| n.strip_prefix(prefix).unwrap_or(n));
-        self.steps.push(Step { id: id.into(), name: name.into(), detail: String::new(), state: StepState::Running });
+        self.steps.push(Step {
+            id: id.into(),
+            name: name.into(),
+            detail: String::new(),
+            state: StepState::Running,
+            result: String::new(),
+        });
     }
 
     fn step(&mut self, id: &str) -> Option<&mut Step> {
         self.steps.iter_mut().rev().find(|s| s.id == id)
+    }
+
+    fn finish_step(&mut self, id: &str, failed: bool, result: &Value) {
+        if let Some(step) = self.step(id) {
+            step.state = if failed { StepState::Failed } else { StepState::Done };
+            step.result = short(&result_text(result), RESULT);
+        }
+    }
+
+    /// The work for the chat view: live (with the thinking) or, after the
+    /// answer, as it is saved with the answer (without it).
+    pub fn to_json(&self, thinking: bool) -> Value {
+        let steps: Vec<Value> = self
+            .steps
+            .iter()
+            .map(|s| {
+                let state = match s.state {
+                    StepState::Running => "running",
+                    StepState::Done => "done",
+                    StepState::Failed => "failed",
+                };
+                json!({ "name": s.name, "detail": s.detail, "state": state, "result": s.result })
+            })
+            .collect();
+        let mut value = json!({
+            "input": self.input,
+            "output": self.output(),
+            "seconds": self.finished.unwrap_or_else(|| self.started.elapsed()).as_secs_f64(),
+            "steps": steps,
+        });
+        if thinking {
+            value["thinking"] = json!(self.thinking.trim());
+        }
+        value
     }
 
     /// `claude -p --output-format stream-json --verbose
@@ -175,10 +221,8 @@ impl Activity {
                 for block in e["message"]["content"].as_array().into_iter().flatten() {
                     if block["type"] == "tool_result" {
                         let failed = block["is_error"].as_bool().unwrap_or(false);
-                        if let Some(step) = self.step(str(&block["tool_use_id"])) {
-                            step.state = if failed { StepState::Failed } else { StepState::Done };
-                            changed = true;
-                        }
+                        self.finish_step(str(&block["tool_use_id"]), failed, &block["content"]);
+                        changed = true;
                     }
                 }
                 changed
@@ -231,9 +275,7 @@ impl Activity {
             }
             Some("tool_execution_end") => {
                 let failed = e["isError"].as_bool().unwrap_or(false);
-                if let Some(step) = self.step(str(&e["toolCallId"])) {
-                    step.state = if failed { StepState::Failed } else { StepState::Done };
-                }
+                self.finish_step(str(&e["toolCallId"]), failed, &e["result"]["content"]);
                 true
             }
             Some("message_end") if e["message"]["role"] == "assistant" => {
@@ -292,16 +334,30 @@ fn arguments(input: &Value) -> String {
     } else {
         map.iter().map(|(k, v)| format!("{k}: {}", value(v))).collect::<Vec<_>>().join(", ")
     };
+    short(&text, 70)
+}
+
+/// A tool result's text: a string, or the text blocks of a list.
+fn result_text(content: &Value) -> String {
+    match content {
+        Value::String(s) => s.clone(),
+        Value::Array(blocks) => blocks.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join(" "),
+        _ => String::new(),
+    }
+}
+
+/// `text` in one line, at most `count` characters.
+fn short(text: &str, count: usize) -> String {
     let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if line.chars().count() > 70 {
-        format!("{}…", line.chars().take(69).collect::<String>())
+    if line.chars().count() > count {
+        format!("{}…", line.chars().take(count - 1).collect::<String>())
     } else {
         line
     }
 }
 
 /// The last `count` characters of `text`, from the start of a word.
-fn tail(text: &str, count: usize) -> String {
+pub fn tail(text: &str, count: usize) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() <= count {
         return text.to_string();
@@ -336,7 +392,7 @@ mod tests {
             r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__kuterlapa__chrome_tabs","input":{}}}}"#,
             r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__kuterlapa__chrome_tabs","input":{"profile":"Work"}}]}}"#,
             r#"{"type":"stream_event","event":{"type":"message_delta","usage":{"output_tokens":82}}}"#,
-            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"..."}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"Window 1\n  Inbox"}]}]}}"#,
             r#"{"type":"stream_event","event":{"type":"message_start","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":6947}}}}"#,
             r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"12345678"}}}"#,
             r#"{"type":"result","is_error":false,"result":" 7 tabs. "}"#,
@@ -350,6 +406,7 @@ mod tests {
         assert_eq!(a.steps[0].name, "chrome_tabs");
         assert_eq!(a.steps[0].detail, "Work");
         assert_eq!(a.steps[0].state, StepState::Done);
+        assert_eq!(a.steps[0].result, "Window 1 Inbox");
         assert_eq!(a.input, 6949 + 7049);
         assert_eq!(a.output(), 82 + 2);
         assert_eq!(a.answer.as_deref(), Some("7 tabs."));
@@ -363,7 +420,7 @@ mod tests {
             r#"{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"The user asks"}}"#,
             r#"{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","id":"c1","toolName":"mcp__kuterlapa__computer_apps"}}"#,
             r#"{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","toolCall":{"id":"c1","arguments":{}}}}"#,
-            r#"{"type":"tool_execution_end","toolCallId":"c1","isError":true}"#,
+            r#"{"type":"tool_execution_end","toolCallId":"c1","isError":true,"result":{"content":[{"type":"text","text":"no access"}]}}"#,
             r#"{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking"},{"type":"text","text":"Safari."}],"stopReason":"stop","usage":{"input":519,"output":42,"cacheRead":0,"cacheWrite":0}}}"#,
         ];
         let mut a = Activity::default();
@@ -373,6 +430,7 @@ mod tests {
         assert_eq!(a.thinking, "The user asks");
         assert_eq!(a.steps[0].name, "computer_apps");
         assert_eq!(a.steps[0].state, StepState::Failed);
+        assert_eq!(a.steps[0].result, "no access");
         assert_eq!((a.input, a.output()), (519, 42));
         assert_eq!(a.answer.as_deref(), Some("Safari."));
         assert_eq!(a.error, None);

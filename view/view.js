@@ -9,9 +9,20 @@
 //   focus: 4,              // a message to scroll to and mark, or null
 //   sessions: [{ name, label, current, shown, when }],
 //   items: [{ kind, title, created, current }],  // the session's, newest first
-//   messages: [{ role: "user" | "assistant", text, profile, created }],
+//   messages: [{ role: "user" | "assistant", text, profile, created, work }],
 //   follow: true   // scroll to the newest message
 // }
+//
+// work = {                       // what the model did for an answer
+//   input: 15500, output: 254,   // tokens read (all calls) and written
+//   seconds: 7.2,
+//   steps: [{ name, detail, state: "running" | "done" | "failed", result }],
+//   thinking: "...",             // only while it works
+//   profile: "Qwen 96k"          // only while it works
+// }
+//
+// window.kuterlapa.work(work) shows the work of the answer that is coming,
+// below the last message; work(null) removes it.
 
 "use strict";
 
@@ -54,9 +65,89 @@ function message(m) {
   div.className = `message ${m.role}`;
   const who = m.role === "user" ? "Ty" : m.profile || "Model";
   div.innerHTML = `<div class="meta">${escapeHtml(who)} · ${escapeHtml(m.created || "")}</div>` +
-    `<div class="body">${renderMarkdown(m.text || "")}</div>`;
+    `<div class="body">${renderMarkdown(m.text || "")}</div>` +
+    (m.work ? `<div class="work done">${workHtml(m.work)}</div>` : "");
   div.querySelectorAll("pre code").forEach((block) => hljs.highlightElement(block));
   return div;
+}
+
+// 537, 4,2k, 19,8k, 250k, 1,2M
+function tokens(n) {
+  if (n < 1000) return String(n);
+  if (n < 100000) return (n / 1000).toFixed(1).replace(".", ",") + "k";
+  if (n < 1000000) return Math.floor(n / 1000) + "k";
+  return (n / 1000000).toFixed(1).replace(".", ",") + "M";
+}
+
+// "1 wywołanie", "3 wywołania", "5 wywołań"
+function calls(n) {
+  const word = n === 1 ? "wywołanie"
+    : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "wywołania" : "wywołań";
+  return `${n} ${word}`;
+}
+
+function workHtml(w, live) {
+  const steps = w.steps || [];
+  const failed = steps.filter((s) => s.state === "failed").length;
+  // Some engines count the tokens read only at the end of a call.
+  const input = live && !w.input ? "…" : tokens(w.input || 0);
+  const parts = [`<span class="tokens">${input}</span> wej.`,
+    `<span class="tokens">${tokens(w.output || 0)}</span> wyj.`];
+  if (steps.length) parts.push(`🔧 ${calls(steps.length)}` + (failed ? ` <span class="failed">(${failed} ✗)</span>` : ""));
+  parts.push(live ? '<span class="seconds"></span>' : `${Math.round(w.seconds || 0)} s`);
+  let html = `<div class="summary">${parts.join(" · ")}</div>`;
+  if (steps.length) {
+    html += '<ul class="steps">' + steps.map((s) => {
+      const mark = { done: "✓", failed: "✗" }[s.state] || "⋯";
+      return `<li class="${escapeHtml(s.state)}"><span class="mark">${mark}</span>` +
+        `<span class="name">${escapeHtml(s.name)}</span>` +
+        (s.detail ? ` <span class="args">${escapeHtml(s.detail)}</span>` : "") +
+        (s.result ? ` <span class="result">→ ${escapeHtml(s.result)}</span>` : "") + "</li>";
+    }).join("") + "</ul>";
+  }
+  if (live && w.thinking) {
+    html += `<div class="thinking"><div>💭 ${escapeHtml(w.thinking)}</div></div>`;
+  }
+  return html;
+}
+
+// The answer that is coming: the model's work, live.
+let live = null;
+let liveStart = 0;
+
+function drawLive() {
+  const box = $("messages");
+  const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const old = $("live");
+  if (old) old.remove();
+  if (live) {
+    const div = document.createElement("div");
+    div.id = "live";
+    div.className = "message assistant working";
+    div.innerHTML = `<div class="meta">${escapeHtml(live.profile || "Model")} · pracuje…</div>` +
+      `<div class="work">${workHtml(live, true)}</div>`;
+    box.appendChild(div);
+    const thinking = div.querySelector(".thinking");
+    if (thinking && thinking.scrollHeight > thinking.clientHeight + 2) thinking.classList.add("clipped");
+    tick();
+  }
+  if (atEnd) {
+    box.style.scrollBehavior = "auto";
+    box.scrollTop = box.scrollHeight;
+    box.style.scrollBehavior = "";
+  }
+}
+
+function tick() {
+  const el = document.querySelector("#live .seconds");
+  if (el) el.textContent = `${Math.floor((Date.now() - liveStart) / 1000)} s`;
+}
+setInterval(tick, 500);
+
+function work(state) {
+  live = state;
+  if (state) liveStart = Date.now() - (state.seconds || 0) * 1000;
+  drawLive();
 }
 
 function render(state) {
@@ -101,6 +192,7 @@ function render(state) {
   }
   const nodes = (state.messages || []).map(message);
   nodes.forEach((n) => box.appendChild(n));
+  if (live) drawLive();
   if (Number.isInteger(state.focus) && nodes[state.focus]) {
     // A message a model found: in the middle of the view, marked.
     const found = nodes[state.focus];
@@ -131,4 +223,4 @@ function scroll(how) {
   }
 }
 
-window.kuterlapa = { render, scroll };
+window.kuterlapa = { render, scroll, work };
