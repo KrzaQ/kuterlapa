@@ -221,6 +221,7 @@ fn act(state: &Arc<State>, button: &str) -> String {
             eprintln!("session: {old} -> {new} (from the window in front)");
             state.chat.session_changed(&old, &new);
         }
+        write_speech_context(state);
     }
     match action {
         // A question about a tool waits: A says yes, B says no.
@@ -402,6 +403,22 @@ fn hide_help(state: &State) -> bool {
         state.chat.refresh();
     }
     true
+}
+
+/// What the user is likely to talk about, for the speech provider: it puts
+/// dictionary words and names found here first in Whisper's context.
+fn write_speech_context(state: &State) {
+    let session = sessions::current();
+    let window = sessions::front_window()
+        .map(|(_, app, title)| format!("{app} — {title}"))
+        .unwrap_or_default();
+    let about: String = session.context.chars().take(400).collect();
+    let text = format!(
+        "Okno: {window}\nSesja: {}: {about}\nOstatnio:\n{}\n",
+        session.label,
+        state.chat.recent_text()
+    );
+    let _ = std::fs::write(paths::state_dir().join("speech-context.txt"), text);
 }
 
 fn run_command(command: &str) {

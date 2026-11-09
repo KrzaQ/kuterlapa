@@ -51,8 +51,11 @@ build/AppIcon.icns: scripts/make-icon.swift
 	swift scripts/make-icon.swift build/AppIcon.iconset
 	iconutil -c icns build/AppIcon.iconset -o $@
 
-test: ## Run the core's tests
+test: ## Run the core's tests and check that the Python providers load
 	cd core && cargo test
+	cd speech && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
+	cd speech/src && python3 -c "from kuterlapa_speech.text import build_prompt, clean, context_names"
+	cd voice && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
 
 speech: ## Set up the speech provider's environment with SPEECH_BACKEND (default mlx)
 	cd speech && uv sync --extra $(SPEECH_BACKEND)

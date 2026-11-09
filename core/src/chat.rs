@@ -308,6 +308,20 @@ impl Chat {
         self.show();
     }
 
+    /// The last two messages of the session's conversation, shortened, as
+    /// hints for speech recognition.
+    pub fn recent_text(&self) -> String {
+        let session = sessions::current_name();
+        let Ok(conversation) = self.store.current_conversation(&session) else { return String::new() };
+        self.store
+            .messages(conversation, 2)
+            .unwrap_or_default()
+            .iter()
+            .map(|m| m.text.chars().take(300).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Hides the conversation without ending anything: the user dictates
     /// into an application now. A model still at work finishes, and recall
     /// shows its answer.

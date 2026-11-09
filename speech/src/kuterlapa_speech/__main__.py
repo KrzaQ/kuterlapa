@@ -109,6 +109,16 @@ def session_dictionaries(settings):
     return list(settings.dictionaries)
 
 
+def speech_context():
+    """What the user is likely to talk about: the core writes the window in
+    front, the last messages and the session's description to the state
+    folder before a recording starts."""
+    try:
+        return (config.STATE / "speech-context.txt").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 PRE_ROLL_FRAMES = 10  # 0.3 s of audio from before the button press
 
 
@@ -150,6 +160,7 @@ class Dictation:
         self.last_text = ""
         self.cancelled = False
         self.dictionaries = list(settings.dictionaries)
+        self.context = ""
         self.auto = False
         self.workers = []
         self.stream = None
@@ -239,6 +250,7 @@ class Dictation:
         self.recorded, self.texts = [], []
         self.cancelled = False
         self.dictionaries = session_dictionaries(self.settings)
+        self.context = speech_context()
         if self.stream is None:
             self._open_stream()
         elif not self.stream.active:
@@ -317,7 +329,7 @@ class Dictation:
         while (piece := self.pieces.get()) is not None:
             if self.cancelled:
                 continue
-            prompt = build_prompt(s.prompt_intro, self.dictionaries, self.last_text)
+            prompt = build_prompt(s.prompt_intro, self.dictionaries, self.last_text, self.context)
             t = time.time()
             try:
                 raw = self.backend.transcribe(piece, s.language, prompt)
