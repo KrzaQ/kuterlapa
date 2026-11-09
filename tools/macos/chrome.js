@@ -3,6 +3,8 @@
 //
 //   tabs                       windows and their tabs; * marks the active tab
 //   tab <window> <tab>         bring that tab to the front
+//   close <window> <tab>...    close tabs of one window (cmd+shift+t in
+//                              Chrome brings a tab back)
 //   open <url> [profile] [new] open the address in a new tab of the front
 //                              window; with a profile name, in a window of
 //                              that profile; "new": in a new window
@@ -61,6 +63,20 @@ function run(argv) {
 			c.activate();
 			return `Tab ${args[0]}.${args[1]}: ${w.activeTab().title()}`;
 		}
+		case "close": {
+			const w = c.windows[Number(args[0]) - 1];
+			// Close from the highest number down, so the numbers of the
+			// tabs still to close stay right.
+			// The numbers may come as one argument: "2 3 4" or "2,3,4".
+			const tabs = args.slice(1).join(" ").split(/[\s,]+/).map(Number).filter((n) => n > 0).sort((a, b) => b - a);
+			const closed = [];
+			for (const n of tabs) {
+				const tab = w.tabs[n - 1];
+				closed.push(`${args[0]}.${n} ${tab.title()}`);
+				tab.close();
+			}
+			return closed.length ? `Closed:\n${closed.join("\n")}` : "No tabs given.";
+		}
 		case "open": {
 			const [url, profile, how] = args;
 			if (profile) {
@@ -82,6 +98,6 @@ function run(argv) {
 		case "profiles":
 			return Object.keys(profiles()).join("\n");
 		default:
-			return "usage: chrome.js tabs | tab <window> <tab> | open <url> [profile] [new] | profiles";
+			return "usage: chrome.js tabs | tab <window> <tab> | close <window> <tab>... | open <url> [profile] [new] | profiles";
 	}
 }

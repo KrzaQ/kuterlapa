@@ -1,0 +1,10 @@
+description = "Close Google Chrome tabs of one window, by the numbers from chrome_tabs (for example duplicates). Check the numbers with chrome_tabs first; they change after closing."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "close", "{window}", "{tabs}"]
+timeout = 20
+
+[params.window]
+type = "integer"
+description = "Window number, the part before the dot"
+
+[params.tabs]
+description = "Tab numbers in that window, the part after the dot, separated by spaces, for example \"2 3 4\""
