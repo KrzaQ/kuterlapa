@@ -9,6 +9,10 @@
 //!                                     and send it, as that application
 //!                                     wants (see submit.rs)
 //!   erase (B)                         drop the recording, or the draft
+//!   next / previous profile (L, ZL)   after a moment, the new model redoes
+//!                                     the last edit on the draft as it was
+//!                                     before it ("let the new model take
+//!                                     over the draft")
 
 use crate::profiles::{self, Profile};
 // `profiles::Current` is shared with the chat.
@@ -36,7 +40,16 @@ struct State {
     /// A short message under the title, for example after a profile
     /// change. It does not replace the draft on screen.
     note: Option<String>,
+    /// The last edit a model made: the draft before it, the user's words,
+    /// and the profile that made it. A new profile can redo it.
+    last_edit: Option<(String, String, String)>,
+    /// Bumped on every profile change, so only the last one takes over.
+    takeover: u64,
 }
+
+/// Wait after a profile change before the new model redoes the edit: the
+/// user may press the profile button a few times.
+const TAKEOVER_DELAY: Duration = Duration::from_millis(1500);
 
 pub struct Draft {
     state: Mutex<State>,
@@ -110,6 +123,7 @@ impl Draft {
             }
             if s.text.is_empty() {
                 s.text = pending;
+                s.last_edit = None;
                 drop(s);
                 self.show();
                 return;
@@ -118,14 +132,23 @@ impl Draft {
             (s.text.clone(), pending)
         };
         self.show();
+        self.edit(draft, pending);
+    }
+
+    /// The current model applies `instruction` to `before`, which becomes
+    /// the draft. Remembers the edit, so another model can redo it.
+    fn edit(&self, before: String, instruction: String) {
         let profile = self.profile();
-        let user = format!("Szkic:\n<<<\n{draft}\n>>>\n\nWypowiedź użytkownika:\n<<<\n{pending}\n>>>");
+        let user = format!("Szkic:\n<<<\n{before}\n>>>\n\nWypowiedź użytkownika:\n<<<\n{instruction}\n>>>");
         let result = engines::complete(&profile, EDIT_PROMPT, &user);
         {
             let mut s = self.state.lock().unwrap();
             s.busy = false;
             match result {
-                Ok(text) if !text.is_empty() => s.text = text,
+                Ok(text) if !text.is_empty() => {
+                    s.text = text;
+                    s.last_edit = Some((before, instruction, profile.name.clone()));
+                }
                 Ok(_) => s.error = Some("model zwrócił pusty tekst".into()),
                 // Discarded with B while the model worked: nothing to show.
                 Err(e) if engines::is_cancelled(&e) => {}
@@ -185,21 +208,47 @@ impl Draft {
     }
 
     /// Shows a profile change. The daemon switched the profile already.
+    /// If a model made the last edit, the new one redoes it after a moment.
     pub fn profile_changed(self: &Arc<Self>, name: &str) {
         // A note above the draft, not a separate view: replacing the view
         // made the draft vanish for a moment, which looked like the model
         // was writing it again.
-        let note = format!("Profil: {name}");
-        self.state.lock().unwrap().note = Some(note.clone());
+        let (note, takeover) = {
+            let mut s = self.state.lock().unwrap();
+            s.takeover += 1;
+            let redo = !s.busy
+                && !s.recording
+                && s.last_edit.as_ref().is_some_and(|(_, _, by)| by != name);
+            let note = if redo {
+                format!("Profil: {name} · za chwilę poprawi szkic od nowa")
+            } else {
+                format!("Profil: {name}")
+            };
+            s.note = Some(note.clone());
+            (note, redo.then_some(s.takeover))
+        };
         self.show();
         let me = Arc::clone(self);
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(2));
-            let mut s = me.state.lock().unwrap();
-            if s.note.as_deref() == Some(note.as_str()) {
-                s.note = None;
-                drop(s);
-                me.show();
+            thread::sleep(if takeover.is_some() { TAKEOVER_DELAY } else { Duration::from_secs(2) });
+            let redo = {
+                let mut s = me.state.lock().unwrap();
+                if s.note.as_deref() == Some(note.as_str()) {
+                    s.note = None;
+                }
+                match (takeover, &s.last_edit) {
+                    (Some(n), Some((before, instruction, _))) if s.takeover == n && !s.busy && !s.recording => {
+                        let job = (before.clone(), instruction.clone());
+                        s.busy = true;
+                        Some(job)
+                    }
+                    _ => None,
+                }
+            };
+            me.show();
+            if let Some((before, instruction)) = redo {
+                eprintln!("draft: the new profile redoes the last edit");
+                me.edit(before, instruction);
             }
         });
     }
