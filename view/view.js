@@ -61,6 +61,8 @@ function message(m) {
 
 function render(state) {
   document.documentElement.style.setProperty("--scale", state.scale || 1);
+  // An empty dark screen, behind the overlay for its screenshots.
+  document.body.classList.toggle("backdrop", !!state.backdrop);
 
   const list = $("session-list");
   list.innerHTML = "";

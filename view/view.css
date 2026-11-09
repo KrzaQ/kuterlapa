@@ -127,6 +127,8 @@ header #where { margin: 0.2em 0 0; }
 
 .empty { color: var(--muted); margin-top: 3em; text-align: center; }
 
+body.backdrop aside, body.backdrop main { visibility: hidden; }
+
 footer {
   padding: calc(8px * var(--scale)) calc(28px * var(--scale));
   border-top: 1px solid var(--line);

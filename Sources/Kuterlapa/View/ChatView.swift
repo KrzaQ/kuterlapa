@@ -15,6 +15,8 @@ final class ChatView: NSObject, WKNavigationDelegate {
     private var pending: String?
 
     var isVisible: Bool { panel.isVisible }
+    /// The panel's window number, for screenshots of it alone.
+    var windowNumber: Int { panel.windowNumber }
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),

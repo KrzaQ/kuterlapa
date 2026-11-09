@@ -10,6 +10,8 @@ import AppKit
 ///   overlay-scale <f> the size of the overlay and its text (1 is normal)
 ///   view <json>    show the large chat view with this state, or hide it
 ///   view-scroll <how>  scroll it: page-up, page-down, top, bottom, or pixels
+///   panel-windows  "overlay=<n> view=<n> overlay-place=<x,y,w,h>": window
+///                  numbers and the overlay's place, for screenshots
 ///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
 ///   mouse <what>   click, double-click or right-click at the pointer
 ///   frontmost      the bundle identifier of the application in front
@@ -68,6 +70,9 @@ enum ShellCommands {
             else { return "error: bad view state" }
             chatView?.update(argument, visible: state["visible"] as? Bool == true)
             return "ok"
+        case "panel-windows":
+            return "overlay=\(overlay?.windowNumber ?? 0) view=\(chatView?.windowNumber ?? 0) "
+                + "overlay-place=\(overlay?.place ?? "")"
         case "view-scroll":
             chatView?.scroll(argument)
             return "ok"

@@ -99,6 +99,17 @@ final class OverlayPanel {
         applyFonts()
     }
 
+    /// The panel's window number, for screenshots of it alone.
+    var windowNumber: Int { panel.windowNumber }
+
+    /// The panel's place on screen in points, from the top left corner of
+    /// the main display: "x,y,width,height", for screenshots of that area.
+    var place: String {
+        let f = panel.frame
+        let top = (NSScreen.screens.first?.frame.height ?? 0) - f.maxY
+        return "\(Int(f.minX)),\(Int(top)),\(Int(f.width)),\(Int(f.height))"
+    }
+
     /// Changes the size of the panel and its text, and redraws it.
     func setScale(_ value: CGFloat) {
         scale = min(max(value, 0.6), 3)

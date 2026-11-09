@@ -3,7 +3,7 @@
 # Machine-specific values (a code signing identity, for example) go in
 # Makefile.local, which git ignores. See Makefile.local.example.
 
-.PHONY: help build test speech install run stop logs hooks check-private clean
+.PHONY: help build test speech install run stop logs hooks check-private screenshots clean
 .DEFAULT_GOAL := help
 
 # Code signing identity. "-" signs ad hoc, which works on any Mac but
@@ -86,6 +86,9 @@ stop: ## Quit the app and wait until it is gone (the core and the providers stop
 	osascript -e 'quit app "Kuterlapa"'
 	@for i in $$(seq 1 50); do pgrep -qf 'Kuterlapa.app/Contents/MacOS' || exit 0; sleep 0.2; done; \
 		echo "Kuterlapa did not quit in 10 s" >&2; exit 1
+
+screenshots: ## Retake docs/screenshots/ with example content (Kuterlapa must run)
+	python3 scripts/screenshots.py
 
 logs: ## Follow the app log
 	tail -f $(LOG_FILE)
