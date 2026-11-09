@@ -124,15 +124,25 @@ fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
         // Shorter to read: the home folder as "~".
         let home = paths::home().to_string_lossy().into_owned();
         let shown = tool.argv(arguments).map(|a| a.join(" ").replace(&home, "~")).unwrap_or_default();
-        let question = json!({ "tool": name, "description": tool.description, "command": shown });
-        let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {question}"), APPROVAL_WAIT)
-            .unwrap_or_else(|e| format!("error: {e}"));
-        if answer != "yes" {
-            return result(format!("The user did not allow this ({answer}). Do not try again unless asked."), false);
+        if let Err(refusal) = ask_user(name, &tool.description, &shown) {
+            return result(refusal, false);
         }
     }
     let (text, ok) = tool.run(arguments);
     result(if text.is_empty() { "done".into() } else { text }, ok)
+}
+
+/// Asks the user through the core (the overlay, A or B). Err holds the
+/// text for the model when the user does not allow it.
+fn ask_user(tool: &str, description: &str, command: &str) -> Result<(), String> {
+    let question = json!({ "tool": tool, "description": description, "command": command });
+    let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {question}"), APPROVAL_WAIT)
+        .unwrap_or_else(|e| format!("error: {e}"));
+    if answer == "yes" {
+        Ok(())
+    } else {
+        Err(format!("The user did not allow this ({answer}). Do not try again unless asked."))
+    }
 }
 
 fn result(text: String, ok: bool) -> Value {
@@ -224,6 +234,13 @@ fn session_schemas() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
         }),
         json!({
+            "name": "session_delete",
+            "description": "Delete a session, only when the user explicitly asks: its folder (context, notes, \
+                            words, window rules) goes to the Trash, its conversations stay in the history. The \
+                            user confirms with A or B first.",
+            "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
+        }),
+        json!({
             "name": "session_show",
             "description": "Show the user the recently used sessions in the overlay (a readable panel), \
                             when they ask to see their sessions.",
@@ -298,6 +315,21 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
         "session_switch" => {
             let name = sessions::switch(text("name"), true)?;
             Ok(format!("Session {name} is current now and stays until the user switches."))
+        }
+        "session_delete" => {
+            let plain = sessions::slug(text("name"))?;
+            if plain == sessions::DEFAULT || !sessions::all().iter().any(|s| s.name == plain) {
+                // Let delete explain (no such session, similar names).
+                sessions::delete(&plain)?;
+            }
+            ask_user(
+                "session_delete",
+                &format!("Usuń sesję „{plain}” (do Kosza; rozmowy zostają w historii)."),
+                &format!("~/.config/kuterlapa/sessions/{plain} → Kosz"),
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            let name = sessions::delete(&plain)?;
+            Ok(format!("Session {name} is in the Trash now."))
         }
         "session_show" => {
             let answer = socket::request(&paths::core_socket(), "panel sessions")?;

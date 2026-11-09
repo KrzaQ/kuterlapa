@@ -243,7 +243,18 @@ fn act(state: &Arc<State>, button: &str) -> String {
             state.draft.button();
             "ok".into()
         }
-        Action::Dictate => speech::send("toggle"),
+        // Dictation into a field while a chat message records would mix
+        // the two: the chat keeps the microphone.
+        Action::Dictate if state.chat.takes_dictation() => "ok".into(),
+        Action::Dictate => {
+            // Typing into an application now: the conversation steps aside
+            // (ZR brings it back), and the narrator stops, so the
+            // microphone does not hear it. A question about a tool stays.
+            if !approvals::pending() {
+                state.chat.dismiss();
+            }
+            speech::send("toggle")
+        }
         Action::Mouse(what) => {
             forget_dictation(state);
             shell::send(&format!("mouse {what}"))

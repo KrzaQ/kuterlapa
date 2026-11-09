@@ -55,6 +55,11 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     }
 }
 
+/// True while a question waits for A or B.
+pub fn pending() -> bool {
+    PENDING.lock().unwrap().is_some()
+}
+
 /// Answers the waiting question (the A and B buttons). Returns false if
 /// none waits.
 pub fn answer(yes: bool) -> bool {

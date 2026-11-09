@@ -361,6 +361,34 @@ pub fn create(
     Ok(name)
 }
 
+/// Moves a session's folder (its context, notes, words and rules) to the
+/// Trash. The conversations stay in the history. If it was current,
+/// "general" becomes current.
+pub fn delete(name: &str) -> Result<String> {
+    let name = slug(name)?;
+    if name == DEFAULT {
+        bail!("the general session cannot be deleted");
+    }
+    let folder = dir(&name);
+    if !folder.is_dir() {
+        let close = similar(&name);
+        let hint = if close.is_empty() { String::new() } else { format!(" Similar: {}.", close.join(", ")) };
+        bail!("no session {name}.{hint}");
+    }
+    let trash = paths::home().join(".Trash");
+    let mut target = trash.join(format!("kuterlapa-session-{name}"));
+    let mut n = 2;
+    while target.exists() {
+        target = trash.join(format!("kuterlapa-session-{name}-{n}"));
+        n += 1;
+    }
+    fs::rename(&folder, &target)?;
+    if current_name() == name {
+        switch(DEFAULT, true)?;
+    }
+    Ok(name)
+}
+
 /// The window in front: its bundle id, application name and title.
 pub fn front_window() -> Option<(String, String, String)> {
     let window = shell::send("window");

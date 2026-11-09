@@ -306,6 +306,20 @@ impl Chat {
         self.show();
     }
 
+    /// Hides the conversation without ending anything: the user dictates
+    /// into an application now. A model still at work finishes, and recall
+    /// shows its answer.
+    pub fn dismiss(&self) {
+        voice::send("stop");
+        let visible = {
+            let mut s = self.state.lock().unwrap();
+            std::mem::replace(&mut s.visible, false)
+        };
+        if visible {
+            self.show();
+        }
+    }
+
     /// Show the last answer again; from the history if there is none in
     /// memory (for example after a restart).
     pub fn recall(&self) {
