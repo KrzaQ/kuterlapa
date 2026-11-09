@@ -4,6 +4,7 @@
 //
 //   KUTERLAPA_EXE      the kuterlapa program, which serves the tools over MCP
 //   KUTERLAPA_SESSION  the session whose tools the model may use
+//   KUTERLAPA_LOCAL    "1" when the model runs locally: private tools too
 //
 // The tools are "direct": declared to the model like pi's own tools.
 
@@ -13,6 +14,7 @@ export default function (pi: any) {
 	const args = ["mcp"];
 	const session = process.env.KUTERLAPA_SESSION;
 	if (session) args.push("--session", session);
+	if (process.env.KUTERLAPA_LOCAL === "1") args.push("--local");
 	pi.registerMcpServer("kuterlapa", {
 		command: exe,
 		args,

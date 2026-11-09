@@ -86,7 +86,11 @@ All in `~/.config/kuterlapa/`:
 
 - `config.toml`: which speech and voice providers the core starts.
 - `profiles.json`: model profiles (engine, model, effort) that L and ZL
-  switch between.
+  switch between. `"local": true` marks a model that runs on your own
+  machines. Only such profiles get the tools marked `private = true`.
+  The engine does not decide it: `pi` can also reach hosted models.
+- `tools/*.toml`: your own tools for the models. A session's own tools are
+  in its `tools/` folder.
 - `sessions/<name>/`: a session's `context.md` (what the model should
   know) and `session.toml` (`folder`: the project folder the model runs in).
 - History of conversations and one-off commands:

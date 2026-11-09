@@ -18,10 +18,16 @@ pub struct Profile {
     /// Claude Code's --effort (low, medium, high), or pi's --thinking.
     #[serde(default)]
     pub effort: Option<String>,
+    /// The model runs on the user's own machines (for example a local
+    /// Ollama), so it may see private data: tools marked private go only to
+    /// such profiles. Not the engine but this says it: pi can also reach
+    /// hosted models.
+    #[serde(default)]
+    pub local: bool,
 }
 
 fn default_profiles() -> Vec<Profile> {
-    vec![Profile { name: "Claude".into(), engine: "claude".into(), model: "sonnet".into(), effort: None }]
+    vec![Profile { name: "Claude".into(), engine: "claude".into(), model: "sonnet".into(), effort: None, local: false }]
 }
 
 pub fn load() -> Vec<Profile> {

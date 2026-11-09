@@ -2,7 +2,9 @@
 //! the tools from tools.rs and the computer tools from computer.rs. The engine (for example `claude -p`) starts it
 //! for each request.
 //!
-//!   kuterlapa mcp [--session <name>]
+//!   kuterlapa mcp [--session <name>] [--local]
+//!
+//! --local: the model runs locally, so tools marked private are offered.
 //!
 //! Messages are JSON-RPC 2.0, one per line. A tool with `confirm = true`
 //! runs only after the user agrees: the server asks the core
@@ -28,7 +30,9 @@ const APPROVAL_WAIT: Duration = Duration::from_secs(150);
 
 pub fn run(args: &[String]) -> Result<()> {
     let session = args.iter().position(|a| a == "--session").and_then(|i| args.get(i + 1)).cloned();
-    let tools = tools::load(session.as_deref());
+    // Private tools only for a model on the user's own machines.
+    let local = args.iter().any(|a| a == "--local");
+    let tools: Vec<Tool> = tools::load(session.as_deref()).into_iter().filter(|t| local || !t.private).collect();
     // Actions already done in this request (one engine run), by tool and
     // arguments: see `call`.
     let mut done = Repeats::default();

@@ -16,6 +16,8 @@
 //!   command = ["~/bin/youtube", "speed", "{speed}"]
 //!   confirm = false      # ask the user first (A yes, B no); default false
 //!   read_only = false    # it only reads (MCP readOnlyHint); default false
+//!   private = false      # only for local profiles ("local": true in
+//!                        # profiles.json); default false
 //!   timeout = 30         # seconds; default 60
 //!
 //!   [params.speed]
@@ -53,6 +55,10 @@ pub struct Tool {
     /// then let it run without a check (readOnlyHint).
     #[serde(default)]
     pub read_only: bool,
+    /// The tool shows private data (messages, for example): only profiles
+    /// with "local": true get it.
+    #[serde(default)]
+    pub private: bool,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
     #[serde(default)]

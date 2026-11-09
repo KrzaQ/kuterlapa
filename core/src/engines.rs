@@ -119,7 +119,7 @@ pub fn complete_in(
 fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
     let mut c = Command::new("claude");
     c.args(["-p", "--model", &profile.model, "--no-session-persistence"]);
-    match tools.and_then(|session| mcp_config(session)) {
+    match tools.and_then(|session| mcp_config(session, profile.local)) {
         // Claude Code's own tools stay off (no shell, no files) except web
         // search. Its permission classifier ("auto") judges each tool call;
         // tools that must ask the user do it in `kuterlapa mcp`.
@@ -152,6 +152,9 @@ fn pi(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<
             c.arg("-e").arg(extension);
             c.args(["--tools", "mcp__kuterlapa__*"]);
             c.env("KUTERLAPA_EXE", me).env("KUTERLAPA_SESSION", session);
+            if profile.local {
+                c.env("KUTERLAPA_LOCAL", "1");
+            }
         }
         _ => {
             c.arg("--no-tools");
@@ -182,8 +185,12 @@ fn pi_extension() -> Option<std::path::PathBuf> {
 }
 
 /// The MCP configuration that starts this program as the tool server.
-fn mcp_config(session: &str) -> Option<String> {
+fn mcp_config(session: &str, local: bool) -> Option<String> {
     let me = std::env::current_exe().ok()?;
-    let server = json!({ "command": me, "args": ["mcp", "--session", session] });
+    let mut args = vec!["mcp", "--session", session];
+    if local {
+        args.push("--local");
+    }
+    let server = json!({ "command": me, "args": args });
     Some(json!({ "mcpServers": { "kuterlapa": server } }).to_string())
 }
