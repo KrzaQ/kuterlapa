@@ -208,9 +208,9 @@ fn act(state: &Arc<State>, button: &str) -> String {
     // front picks the session first, so the right context and dictionary
     // are used.
     if matches!(action, Action::Dictate | Action::Draft | Action::Chat | Action::Command1) {
-        if let Some(name) = sessions::follow_window() {
-            eprintln!("session: {name} (from the window in front)");
-            state.chat.session_changed(&name);
+        if let Some((old, new)) = sessions::follow_window() {
+            eprintln!("session: {old} -> {new} (from the window in front)");
+            state.chat.session_changed(&old, &new);
         }
     }
     match action {

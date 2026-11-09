@@ -218,8 +218,28 @@ fn session_schemas() -> Vec<Value> {
         json!({
             "name": "session_switch",
             "description": "Make a session current, when the user asks to go to it. It stays until the user \
-                            switches again (sticky). The next message goes to that session's conversation.",
+                            switches again (sticky). The next message goes to that session's conversation. If \
+                            it does not exist, never create it: tell the user, name similar sessions, and \
+                            offer to create it.",
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
+        }),
+        json!({
+            "name": "session_back",
+            "description": "Go back to the session before the current one, when the user asks.",
+            "inputSchema": { "type": "object", "properties": {} },
+        }),
+        json!({
+            "name": "session_bind",
+            "description": "When the user says the window in front belongs to a session: add that window to the \
+                            session's rules, so it picks the session (automatic mode). title_part is a part of \
+                            the window title that stays the same (a sheet, project or channel name; not counts \
+                            of unread items). With by_app true and no title_part, the whole application picks \
+                            the session. Answers with the window it used.",
+            "inputSchema": { "type": "object", "properties": {
+                "session": { "type": "string" },
+                "title_part": { "type": "string" },
+                "by_app": { "type": "boolean", "description": "Also require (or, alone, use) the application; default true" },
+            }, "required": ["session"] },
         }),
         json!({
             "name": "session_auto",
@@ -229,15 +249,18 @@ fn session_schemas() -> Vec<Value> {
         }),
         json!({
             "name": "session_create",
-            "description": "Create a new session when the user asks: a short name, what it is about, and \
-                            optionally a project folder and the windows that pick it (application names or \
-                            bundle ids, parts of window titles).",
+            "description": "Create a new session, only when the user explicitly asks to create one: a short \
+                            name (Polish letters are fine), what it is about, and optionally a project folder \
+                            and the windows that pick it (application names or bundle ids, parts of window \
+                            titles). It refuses when a session with a similar name exists: then ask the user \
+                            whether they mean that one, and pass allow_similar only if they confirm a new one.",
             "inputSchema": { "type": "object", "properties": {
                 "name": { "type": "string" },
                 "context": { "type": "string", "description": "What the session is about, for the model" },
                 "folder": { "type": "string" },
                 "apps": strings,
                 "titles": strings,
+                "allow_similar": { "type": "boolean", "description": "Only after the user confirmed" },
             }, "required": ["name", "context"] },
         }),
     ]
@@ -259,7 +282,8 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
             for s in sessions::all() {
                 let about = s.context.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
                 let rules = s.rules();
-                out.push_str(&format!("- {}{}{}\n", s.name,
+                let label = if s.label != s.name { format!(" ({})", s.label) } else { String::new() };
+                out.push_str(&format!("- {}{label}{}{}\n", s.name,
                     if about.is_empty() { String::new() } else { format!(": {about}") },
                     if rules.is_empty() { String::new() } else { format!(" [{rules}]") }));
             }
@@ -269,13 +293,23 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
             let name = sessions::switch(text("name"), true)?;
             Ok(format!("Session {name} is current now and stays until the user switches."))
         }
+        "session_back" => {
+            let name = sessions::back()?;
+            Ok(format!("Back in session {name}; it stays until the user switches."))
+        }
+        "session_bind" => {
+            let by_app = args.get("by_app").and_then(Value::as_bool).unwrap_or(true);
+            let window = sessions::bind(text("session"), text("title_part"), by_app)?;
+            Ok(format!("The window {window:?} now picks session {} (when sessions are automatic).", text("session")))
+        }
         "session_auto" => {
             sessions::set_automatic()?;
             Ok("Sessions now follow the window in front.".into())
         }
         "session_create" => {
             let folder = Some(text("folder")).filter(|f| !f.is_empty());
-            let name = sessions::create(text("name"), text("context"), folder, &list("apps"), &list("titles"))?;
+            let allow = args.get("allow_similar").and_then(Value::as_bool).unwrap_or(false);
+            let name = sessions::create(text("name"), text("context"), folder, &list("apps"), &list("titles"), allow)?;
             Ok(format!("Created session {name}. It is not current; switch to it if the user wants."))
         }
         other => anyhow::bail!("no tool {other}"),

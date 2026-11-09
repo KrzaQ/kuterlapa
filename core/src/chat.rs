@@ -393,9 +393,13 @@ impl Chat {
         });
     }
 
-    /// The window in front picked another session.
-    pub fn session_changed(self: &Arc<Self>, name: &str) {
-        self.flash(&format!("Sesja: {name} (z okna)"));
+    /// The window in front picked another session. The note stays longer
+    /// than others: the user must see that the context changed.
+    pub fn session_changed(self: &Arc<Self>, old: &str, new: &str) {
+        self.flash_for(
+            &format!("Sesja: {old} → {new} (z okna) · cofnięcie: „wróć do poprzedniej sesji”"),
+            Duration::from_secs(5),
+        );
     }
 
     pub fn profile_changed(self: &Arc<Self>, name: &str) {
@@ -404,12 +408,16 @@ impl Chat {
 
     /// A note for two seconds, above the answer if one is shown.
     fn flash(self: &Arc<Self>, note: &str) {
+        self.flash_for(note, Duration::from_secs(2));
+    }
+
+    fn flash_for(self: &Arc<Self>, note: &str, time: Duration) {
         let note = note.to_string();
         self.state.lock().unwrap().note = Some(note.clone());
         self.show();
         let me = Arc::clone(self);
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(time);
             let mut s = me.state.lock().unwrap();
             if s.note.as_deref() == Some(note.as_str()) {
                 s.note = None;
@@ -531,6 +539,15 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
     if !session.context.trim().is_empty() {
         p.push_str(&format!("\n\nKontekst sesji „{}”:\n{}", session.name, session.context.trim()));
     }
+    p.push_str(
+        "\n\nSesje: zmieniaj sesję (session_switch) tylko, gdy użytkownik wprost o to prosi, np. „przejdź do \
+         sesji X” albo „wejdź do iTerma, do sesji X”. Samo przejście do okna, karty czy aplikacji sesji nie \
+         zmienia: w trybie automatycznym zrobi to okno, gdy użytkownik zacznie mówić. Gdy użytkownik mówi, \
+         że okno na wierzchu należy do jakiejś sesji, użyj session_bind ze stałym fragmentem tytułu (nazwa \
+         arkusza, projektu, kanału; nie liczby powiadomień). „Wróć do poprzedniej sesji”: session_back. Nową sesję twórz \
+         (session_create) tylko na wyraźną prośbę użytkownika; gdy sesji, do której chce przejść, nie ma, \
+         zaproponuj utworzenie i zaczekaj na zgodę.",
+    );
     p.push_str(&memory::prompt(&session.name));
     p
 }

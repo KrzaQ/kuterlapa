@@ -27,6 +27,8 @@ pub const DEFAULT: &str = "general";
 #[derive(Debug, Clone)]
 pub struct Session {
     pub name: String,
+    /// The name as the user said it; the same as `name` when not set.
+    pub label: String,
     pub context: String,
     /// The project folder; engines run there, so they see its CLAUDE.md.
     pub folder: Option<PathBuf>,
@@ -37,6 +39,9 @@ pub struct Session {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 struct SessionFile {
+    /// The name as the user said it, with Polish letters; the folder has
+    /// the plain form (see `slug`).
+    name: Option<String>,
     folder: Option<String>,
     apps: Vec<String>,
     titles: Vec<String>,
@@ -56,6 +61,30 @@ fn state_file() -> PathBuf {
 
 fn mode_file() -> PathBuf {
     paths::state_dir().join("session-mode")
+}
+
+fn previous_file() -> PathBuf {
+    paths::state_dir().join("session-previous")
+}
+
+/// Makes `name` current and remembers the one before, for `back`.
+fn set_current(name: &str) -> Result<()> {
+    fs::create_dir_all(paths::state_dir())?;
+    let old = current_name();
+    if old != name {
+        fs::write(previous_file(), format!("{old}\n"))?;
+    }
+    fs::write(state_file(), format!("{name}\n"))?;
+    Ok(())
+}
+
+/// Goes back to the session before the current one; it stays (sticky).
+pub fn back() -> Result<String> {
+    let previous = fs::read_to_string(previous_file()).unwrap_or_default().trim().to_string();
+    if previous.is_empty() {
+        bail!("there is no previous session");
+    }
+    switch(&previous, true)
 }
 
 pub fn current_name() -> String {
@@ -81,6 +110,7 @@ pub fn load(name: &str) -> Session {
         .unwrap_or_default();
     Session {
         name: name.to_string(),
+        label: settings.name.clone().unwrap_or_else(|| name.to_string()),
         context,
         folder: settings.folder.map(|f| paths::expand(&f)).filter(|p| p.is_dir()),
         apps: settings.apps,
@@ -106,19 +136,79 @@ pub fn all() -> Vec<Session> {
     names.iter().map(|n| load(n)).collect()
 }
 
-/// A name for a session folder: lowercase letters, digits, - and _.
-fn clean(name: &str) -> Result<String> {
-    let name: String = name
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
-        .collect();
-    let name = name.trim_matches('-').to_string();
-    if name.is_empty() || name.len() > 40 {
-        bail!("a session name needs 1 to 40 letters, digits, - or _");
+/// The plain form of a name, for the folder and for comparing names:
+/// lowercase ASCII, accents removed ("Zakupy świąteczne" → "zakupy-swiateczne"),
+/// other characters as "-".
+pub fn slug(name: &str) -> Result<String> {
+    let mut out = String::new();
+    for c in name.trim().to_lowercase().chars() {
+        let plain = match c {
+            'ą' | 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => "a",
+            'ć' | 'č' | 'ç' => "c",
+            'ę' | 'è' | 'é' | 'ê' | 'ë' | 'ě' => "e",
+            'ł' => "l",
+            'ń' | 'ñ' | 'ň' => "n",
+            'ó' | 'ò' | 'ô' | 'õ' | 'ö' | 'ø' => "o",
+            'ś' | 'š' | 'ß' => "s",
+            'ź' | 'ż' | 'ž' => "z",
+            'ì' | 'í' | 'î' | 'ï' => "i",
+            'ù' | 'ú' | 'û' | 'ü' | 'ů' => "u",
+            'ý' | 'ÿ' => "y",
+            'ř' => "r",
+            'ť' => "t",
+            'ď' => "d",
+            c if c.is_ascii_alphanumeric() || c == '_' => {
+                out.push(c);
+                continue;
+            }
+            _ => "-",
+        };
+        if plain == "-" && out.ends_with('-') {
+            continue;
+        }
+        out.push_str(plain);
     }
-    Ok(name)
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() || out.len() > 40 {
+        bail!("a session name needs 1 to 40 letters or digits");
+    }
+    Ok(out)
+}
+
+fn clean(name: &str) -> Result<String> {
+    slug(name)
+}
+
+/// Edit distance between two plain names.
+fn distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut previous = row[0];
+        row[0] = i + 1;
+        for j in 0..b.len() {
+            let current = row[j + 1];
+            row[j + 1] = (row[j + 1] + 1).min(row[j] + 1).min(previous + usize::from(ca != b[j]));
+            previous = current;
+        }
+    }
+    row[b.len()]
+}
+
+/// Sessions whose plain name is the same as `name`'s or close to it: one
+/// or two letters apart, or one containing the other.
+pub fn similar(name: &str) -> Vec<String> {
+    let Ok(wanted) = slug(name) else { return Vec::new() };
+    all()
+        .into_iter()
+        .map(|s| s.name)
+        .filter(|n| {
+            let short = n.len().min(wanted.len());
+            n == &wanted
+                || distance(n, &wanted) <= if short <= 4 { 1 } else { 2 }
+                || (short >= 3 && (n.contains(&wanted) || wanted.contains(n.as_str())))
+        })
+        .collect()
 }
 
 /// Makes `name` the current session. `sticky`: keep it until the user
@@ -127,10 +217,14 @@ pub fn switch(name: &str, sticky: bool) -> Result<String> {
     let name = clean(name)?;
     if name != DEFAULT && !dir(&name).is_dir() {
         let known: Vec<String> = all().into_iter().map(|s| s.name).collect();
-        bail!("no session {name}; sessions: {}", known.join(", "));
+        let close = similar(&name);
+        let hint = if close.is_empty() { String::new() } else { format!(" Similar: {}.", close.join(", ")) };
+        bail!(
+            "no session {name}.{hint} All sessions: {}. Do not create one unless the user asks; you may offer it.",
+            known.join(", ")
+        );
     }
-    fs::create_dir_all(paths::state_dir())?;
-    fs::write(state_file(), format!("{name}\n"))?;
+    set_current(&name)?;
     fs::write(mode_file(), if sticky { "sticky\n" } else { "auto\n" })?;
     Ok(name)
 }
@@ -142,16 +236,37 @@ pub fn set_automatic() -> Result<()> {
     Ok(())
 }
 
-/// Creates a session folder with its context and rules.
-pub fn create(name: &str, context: &str, folder: Option<&str>, apps: &[String], titles: &[String]) -> Result<String> {
-    let name = clean(name)?;
+/// Creates a session folder with its context and rules. Refuses when a
+/// session with the same or a similar name exists, unless
+/// `allow_similar`: the user may mean that one.
+pub fn create(
+    name: &str,
+    context: &str,
+    folder: Option<&str>,
+    apps: &[String],
+    titles: &[String],
+    allow_similar: bool,
+) -> Result<String> {
+    let label = name.trim().to_string();
+    let name = slug(name)?;
     let dir = dir(&name);
-    if dir.exists() {
+    if dir.exists() || name == DEFAULT {
         bail!("session {name} exists already");
+    }
+    let close = similar(&name);
+    if !close.is_empty() && !allow_similar {
+        bail!(
+            "similar sessions exist: {}. Ask the user whether they mean one of them; create a new one only \
+             if they confirm (allow_similar).",
+            close.join(", ")
+        );
     }
     fs::create_dir_all(&dir)?;
     fs::write(dir.join("context.md"), format!("{}\n", context.trim()))?;
     let mut toml = String::new();
+    if label != name {
+        toml.push_str(&format!("name = {label:?}\n"));
+    }
     if let Some(folder) = folder.filter(|f| !f.trim().is_empty()) {
         toml.push_str(&format!("folder = {:?}\n", folder.trim()));
     }
@@ -165,6 +280,64 @@ pub fn create(name: &str, context: &str, folder: Option<&str>, apps: &[String], 
         fs::write(dir.join("session.toml"), toml)?;
     }
     Ok(name)
+}
+
+/// The window in front: its bundle id, application name and title.
+pub fn front_window() -> Option<(String, String, String)> {
+    let window = shell::send("window");
+    if window.starts_with("error") || window.is_empty() {
+        return None;
+    }
+    let mut parts = window.splitn(3, '\t');
+    Some((
+        parts.next()?.to_string(),
+        parts.next().unwrap_or("").to_string(),
+        parts.next().unwrap_or("").to_string(),
+    ))
+}
+
+/// Adds the window in front to a session's rules: its application and,
+/// if given, a part of its title that stays the same. Returns the window
+/// that was added, to show the user.
+pub fn bind(name: &str, title_part: &str, by_app: bool) -> Result<String> {
+    let name = clean(name)?;
+    let path = dir(&name).join("session.toml");
+    if !dir(&name).is_dir() {
+        bail!("no session {name}");
+    }
+    let (bundle, app, title) = front_window().ok_or_else(|| anyhow::anyhow!("cannot read the window in front"))?;
+    let part = title_part.trim();
+    if !part.is_empty() && !title.to_lowercase().contains(&part.to_lowercase()) {
+        bail!("the window title {title:?} does not contain {part:?}; pick a part of it");
+    }
+    if part.is_empty() && !by_app {
+        bail!("give a part of the title, or bind the whole application");
+    }
+    let mut file: SessionFile = fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| toml::from_str(&t).ok())
+        .unwrap_or_default();
+    if by_app && !file.apps.iter().any(|a| a.eq_ignore_ascii_case(&app) || a.eq_ignore_ascii_case(&bundle)) {
+        file.apps.push(app.clone());
+    }
+    if !part.is_empty() && !file.titles.iter().any(|t| t.eq_ignore_ascii_case(part)) {
+        file.titles.push(part.to_string());
+    }
+    let mut toml = String::new();
+    if let Some(label) = &file.name {
+        toml.push_str(&format!("name = {label:?}\n"));
+    }
+    if let Some(folder) = &file.folder {
+        toml.push_str(&format!("folder = {folder:?}\n"));
+    }
+    if !file.apps.is_empty() {
+        toml.push_str(&format!("apps = {:?}\n", file.apps));
+    }
+    if !file.titles.is_empty() {
+        toml.push_str(&format!("titles = {:?}\n", file.titles));
+    }
+    fs::write(&path, toml)?;
+    Ok(format!("{app}: {title}"))
 }
 
 impl Session {
@@ -199,28 +372,24 @@ impl Session {
 /// When sessions are automatic, picks the session for the window in front
 /// and makes it current: the best fit, or "general" when none fits.
 /// Returns the new name when it changed.
-pub fn follow_window() -> Option<String> {
+pub fn follow_window() -> Option<(String, String)> {
     if !automatic() {
         return None;
     }
-    let window = shell::send("window");
-    if window.starts_with("error") {
-        return None;
-    }
-    let mut parts = window.splitn(3, '\t');
-    let (bundle, app, title) = (parts.next()?, parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let (bundle, app, title) = front_window()?;
     let best = all()
         .into_iter()
-        .map(|s| (s.score(bundle, app, title), s.name))
+        .map(|s| (s.score(&bundle, &app, &title), s.name))
         .filter(|(score, _)| *score > 0)
         .max_by_key(|(score, _)| *score)
         .map(|(_, name)| name)
         .unwrap_or_else(|| DEFAULT.to_string());
-    if best == current_name() {
+    let old = current_name();
+    if best == old {
         return None;
     }
-    let _ = fs::write(state_file(), format!("{best}\n"));
-    Some(best)
+    let _ = set_current(&best);
+    Some((old, best))
 }
 
 #[cfg(test)]
@@ -230,6 +399,7 @@ mod tests {
     fn session(apps: &[&str], titles: &[&str]) -> Session {
         Session {
             name: "s".into(),
+            label: "s".into(),
             context: String::new(),
             folder: None,
             apps: apps.iter().map(|s| s.to_string()).collect(),
@@ -246,5 +416,21 @@ mod tests {
         assert_eq!(bills.score("com.google.Chrome", "Google Chrome", "Bills - Sheets"), 2);
         assert_eq!(bills.score("com.google.Chrome", "Google Chrome", "News"), 0);
         assert_eq!(session(&[], &[]).score("a", "b", "c"), 0);
+    }
+
+    #[test]
+    fn slugs() {
+        assert_eq!(slug("Zakupy świąteczne").unwrap(), "zakupy-swiateczne");
+        assert_eq!(slug("  Żółć  ").unwrap(), "zolc");
+        assert_eq!(slug("Hex-Rays").unwrap(), "hex-rays");
+        assert!(slug("!!!").is_err());
+    }
+
+    #[test]
+    fn distances() {
+        assert_eq!(distance("zakupy", "zakupy"), 0);
+        assert_eq!(distance("zakupy", "zakup"), 1);
+        assert_eq!(distance("hexrays", "hex-rays"), 1);
+        assert!(distance("kuterlapa", "zakupy") > 2);
     }
 }
