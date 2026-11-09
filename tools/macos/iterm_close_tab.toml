@@ -1,0 +1,11 @@
+description = "Close an iTerm2 tab, by the numbers from iterm_tabs. Whatever runs in it stops."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "close", "{window}", "{tab}"]
+timeout = 20
+
+[params.window]
+type = "integer"
+description = "Window number"
+
+[params.tab]
+type = "integer"
+description = "Tab number"

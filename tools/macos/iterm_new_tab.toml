@@ -1,0 +1,7 @@
+description = "Open a new iTerm2 tab in the front window, and optionally run a command in it at once (for example ssh myserver). Then read it with iterm_read 0 0."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "new", "{command}"]
+timeout = 20
+
+[params.command]
+description = "A command to run in the new tab"
+required = false

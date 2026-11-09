@@ -8,7 +8,7 @@
 //! `computer_do` runs several actions in one call, and `computer_find`
 //! lists only the elements that match a text.
 
-use crate::{paths, shell};
+use crate::{paths, sessions, shell};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::thread;
@@ -67,7 +67,8 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ),
     (
         "computer_type",
-        "Type text into the focused field. Never type passwords, card numbers or other secrets.",
+        "Type text into the focused field of the application in front. Never type passwords, card \
+         numbers or other secrets. For a terminal, use iterm_run instead: it writes to the tab itself.",
         r#"{"text": {"type": "string"}}"#,
     ),
     (
@@ -158,7 +159,16 @@ pub fn call(name: &str, args: &Map<String, Value>) -> (Vec<Value>, bool) {
         "computer_do" => run_steps(args),
         "computer_zoom" => zoom(args),
         other => match other.strip_prefix("computer_") {
-            Some(action) => act(action, args).and_then(|_| after()),
+            Some(action) => {
+                // Keys and text go to the application in front, which may
+                // not be the one the model thinks: say where they went.
+                let target = matches!(action, "type" | "key")
+                    .then(sessions::front_window)
+                    .flatten()
+                    .map(|(_, app, title)| format!("Went to: {app} — {title}\n"))
+                    .unwrap_or_default();
+                act(action, args).and_then(|_| after()).map(|list| format!("{target}{list}"))
+            }
             None => Err(format!("no tool {other}")),
         },
     };
