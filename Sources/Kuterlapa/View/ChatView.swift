@@ -20,7 +20,9 @@ final class ChatView: NSObject, WKNavigationDelegate {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
                         styleMask: [.nonactivatingPanel, .borderless],
                         backing: .buffered, defer: true)
-        panel.level = .floating
+        // Above the menu bar; the overlay (recording, countdown) still
+        // comes in front of it.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -31,9 +33,6 @@ final class ChatView: NSObject, WKNavigationDelegate {
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         web = WKWebView(frame: .zero, configuration: configuration)
         web.setValue(false, forKey: "drawsBackground")
-        web.wantsLayer = true
-        web.layer?.cornerRadius = 14
-        web.layer?.masksToBounds = true
         super.init()
         web.navigationDelegate = self
         panel.contentView = web
@@ -77,11 +76,9 @@ final class ChatView: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// About 70% of the screen, in the middle.
+    /// The whole screen: the view is for reading from a distance.
     private func place() {
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let width = min(screen.width * 0.72, 1300), height = screen.height * 0.82
-        panel.setFrame(NSRect(x: screen.midX - width / 2, y: screen.midY - height / 2,
-                              width: width, height: height), display: true)
+        let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        panel.setFrame(screen, display: true)
     }
 }
