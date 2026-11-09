@@ -52,6 +52,13 @@ final class Sticks {
             // Stick up is +y; screen coordinates grow downwards.
             Mouse.move(by: CGPoint(x: v.x * pointerSpeed * frame, y: -v.y * pointerSpeed * frame))
         case "scroll", "scroll-inverted":
+            // While the chat view is open, the scroll stick scrolls it,
+            // wherever the pointer is. Stick up shows what is above.
+            if let view = ShellCommands.chatView, view.isVisible {
+                let dy = -v.y * scrollSpeed * frame
+                if abs(dy) >= 1 { view.scroll(String(Double(dy))) }
+                return
+            }
             let sign: CGFloat = role == "scroll" ? 1 : -1
             scrollRest.x += sign * v.x * scrollSpeed * frame
             scrollRest.y += sign * v.y * scrollSpeed * frame

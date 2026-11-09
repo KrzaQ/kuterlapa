@@ -22,5 +22,6 @@
   "R": "click",
   "+ double": "help",
   "Share double": "help",
-  "+ hold": "sessions"
+  "+ hold": "sessions",
+  "Share": "view"
 }

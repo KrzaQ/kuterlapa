@@ -57,6 +57,8 @@ pub enum Action {
     Help,
     /// Show the recently used sessions, or hide them.
     Sessions,
+    /// Open the large chat view, or close it.
+    View,
 }
 
 impl Action {
@@ -71,6 +73,7 @@ impl Action {
             "voice-stop" => return Some(Action::VoiceStop),
             "help" => return Some(Action::Help),
             "sessions" => return Some(Action::Sessions),
+            "view" => return Some(Action::View),
             _ => {}
         }
         if spec == "draft" {

@@ -8,6 +8,8 @@ import AppKit
 ///   erase <n>      press Backspace n times
 ///   overlay <json> show the overlay with this state, or hide it
 ///   overlay-scale <f> the size of the overlay and its text (1 is normal)
+///   view <json>    show the large chat view with this state, or hide it
+///   view-scroll <how>  scroll it: page-up, page-down, top, bottom, or pixels
 ///   sticks <json>  what the analog sticks do: {"leftstick": "scroll", ...}
 ///   mouse <what>   click, double-click or right-click at the pointer
 ///   frontmost      the bundle identifier of the application in front
@@ -33,6 +35,7 @@ enum ShellCommands {
     /// Set by the app delegate once they exist.
     static var overlay: OverlayPanel?
     static var sticks: Sticks?
+    static var chatView: ChatView?
 
     static func handle(_ line: String) -> String {
         let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
@@ -59,6 +62,15 @@ enum ShellCommands {
             return Computer.activate(argument)
         case "windows":
             return Desktops.list()
+        case "view":
+            guard let data = argument.data(using: .utf8),
+                  let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return "error: bad view state" }
+            chatView?.update(argument, visible: state["visible"] as? Bool == true)
+            return "ok"
+        case "view-scroll":
+            chatView?.scroll(argument)
+            return "ok"
         case "overlay-scale":
             guard let value = Double(argument) else { return "error: bad scale \(argument)" }
             overlay?.setScale(CGFloat(value))

@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Paths.ensureDirectories()
         log("Kuterlapa started")
         ShellCommands.overlay = OverlayPanel()
+        ShellCommands.chatView = ChatView()
         ShellCommands.sticks = Sticks(gamepad: gamepad)
         log("accessibility: \(Keystrokes.requestPermission())")
         shell.start()

@@ -39,6 +39,7 @@ mod speech;
 mod store;
 mod submit;
 mod tools;
+mod view;
 mod voice;
 
 use anyhow::{bail, Result};

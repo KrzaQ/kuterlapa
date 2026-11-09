@@ -35,6 +35,7 @@ build: build/AppIcon.icns ## Build the core and the macOS app, and sign build/Ku
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Helpers $(APP)/Contents/Resources
 	cp build/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
+	cp -R view $(APP)/Contents/Resources/
 	cp .build/release/Kuterlapa $(APP)/Contents/MacOS/Kuterlapa
 	# Helpers/, not MacOS/: the default macOS file system ignores case, so
 	# "kuterlapa" next to "Kuterlapa" would overwrite the app.

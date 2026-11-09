@@ -176,6 +176,11 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::VoiceStop => (Model, "cisza", "ucisz lektora (i zatrzymaj telewizor)".into()),
         Action::Help => (Model, "ta pomoc", "pokaż albo schowaj tę pomoc".into()),
         Action::Sessions => (Model, "ostatnie sesje", "pokaż albo schowaj ostatnio używane sesje".into()),
+        Action::View => (
+            Model,
+            "widok czatu",
+            "otwórz albo zamknij duży widok rozmowy (↑ ↓ przewijanie, ← → inne rozmowy, B zamyka)".into(),
+        ),
         Action::Mouse(how) => match how.as_str() {
             "click" => (Screen, "klik", "klik myszą w miejscu kursora".into()),
             "double-click" => (Screen, "podwójny klik", "podwójny klik w miejscu kursora".into()),

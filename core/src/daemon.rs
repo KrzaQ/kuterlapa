@@ -10,7 +10,7 @@ use crate::hooks::{self, Flag};
 use crate::mapping::{Action, Mapping};
 use crate::profiles::Current;
 use crate::store::Store;
-use crate::{paths, sessions, shell, socket, speech, voice};
+use crate::{paths, sessions, shell, socket, speech, view, voice};
 use anyhow::Result;
 use serde_json::json;
 use std::io::Read;
@@ -40,6 +40,7 @@ pub fn run(config: Config) -> Result<()> {
     speech::supervise(config.speech.command);
     voice::supervise(config.voice.command);
     let store = Arc::new(Store::open()?);
+    view::init(Arc::clone(&store));
     let profiles = Arc::new(Current::new());
     let state = Arc::new(State {
         mapping: Mutex::new(Mapping::new()),
@@ -225,6 +226,22 @@ fn act(state: &Arc<State>, button: &str) -> String {
         // A question about a tool waits: A says yes, B says no.
         Action::FinishDictation { .. } if approvals::answer(true) => "ok".into(),
         Action::EraseDictation { .. } if approvals::answer(false) => "ok".into(),
+        // While the chat view is open, the d-pad and B work in it.
+        _ if view::is_open() && matches!(button, "Up" | "Down" | "Left" | "Right" | "B") => {
+            match button {
+                "Up" => view::scroll("page-up"),
+                "Down" => view::scroll("page-down"),
+                "Left" => view::step(-1),
+                "Right" => view::step(1),
+                _ => view::close(),
+            }
+            "ok".into()
+        }
+        Action::View => {
+            hide_help(state);
+            view::toggle();
+            "ok".into()
+        }
         Action::Help => {
             if !hide_help(state) {
                 let overlay = help::overlay(&mut state.mapping.lock().unwrap());

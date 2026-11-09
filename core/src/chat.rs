@@ -221,6 +221,7 @@ impl Chat {
         self.show();
         hooks::set(Flag::Thinking, true);
         let result = self.ask(mode, &question, thread);
+        crate::view::changed();
         let speak = {
             let mut s = self.state.lock().unwrap();
             s.busy = false;
@@ -262,6 +263,7 @@ impl Chat {
                 let conversation = self.store.current_conversation(&session.name)?;
                 let history = self.store.messages(conversation, HISTORY)?;
                 self.store.add_message(conversation, "user", question, None)?;
+                crate::view::changed();
                 let answer =
                     engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_message(conversation, "assistant", &answer, Some(&profile.name))?;
@@ -475,6 +477,13 @@ impl Chat {
         let profile = self.profiles.get().name;
         let session = sessions::current_name();
         let s = self.state.lock().unwrap();
+        // The chat view shows the conversation itself; the overlay only
+        // shows a recording (what the user says, the pause countdown).
+        if crate::view::is_open() && !s.recording && s.note.is_none() {
+            drop(s);
+            shell::overlay(&json!({ "visible": false }));
+            return;
+        }
         if !s.visible && s.note.is_none() {
             drop(s);
             shell::overlay(&json!({ "visible": false }));

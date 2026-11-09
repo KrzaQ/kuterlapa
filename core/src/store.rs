@@ -118,6 +118,33 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The ids of a session's conversations that have messages, oldest
+    /// first, with when each started (local time).
+    pub fn conversations(&self, session: &str) -> Result<Vec<(i64, String)>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT c.id, strftime('%Y-%m-%d %H:%M', c.created, 'localtime') FROM conversations c
+             WHERE c.session = ?1 AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation = c.id)
+             ORDER BY c.id",
+        )?;
+        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// A conversation's messages for the chat view: role, text, profile and
+    /// time (local), oldest first, at most `limit` of the newest.
+    pub fn messages_full(&self, conversation: i64, limit: usize) -> Result<Vec<(String, String, Option<String>, String)>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime') FROM (
+                 SELECT id, role, text, profile, created FROM messages WHERE conversation = ?1
+                 ORDER BY id DESC LIMIT ?2)
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![conversation, limit as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// Adds a command to a thread (None: start a new thread). Returns the
     /// thread id.
     pub fn add_command(

@@ -1,0 +1,114 @@
+/* The chat view: dark, calm, large text for reading from a distance. */
+:root {
+  --bg: #1c1d20;
+  --panel: #232428;
+  --line: #34363c;
+  --text: #e8e6e3;
+  --muted: #9a9ca3;
+  --accent: #f0a04b;
+  --user: #2c3f52;
+  --code: #15161a;
+  --scale: 1;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: calc(17px * var(--scale)) / 1.55 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  overflow: hidden;
+}
+
+body { display: flex; }
+
+aside {
+  width: calc(230px * var(--scale));
+  flex: none;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: calc(18px * var(--scale)) calc(14px * var(--scale));
+  overflow: hidden;
+}
+
+aside h2, header #where {
+  margin: 0 0 0.8em;
+  color: var(--accent);
+  font-size: 0.72em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#session-list { list-style: none; margin: 0; padding: 0; }
+#session-list li { padding: 0.45em 0.6em; border-radius: 8px; margin-bottom: 0.2em; }
+#session-list li .name { font-weight: 600; }
+#session-list li .when { display: block; color: var(--muted); font-size: 0.78em; }
+#session-list li.current { background: rgba(240, 160, 75, 0.16); }
+#session-list li.current .name::before { content: "● "; color: var(--accent); }
+
+main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+header {
+  padding: calc(16px * var(--scale)) calc(28px * var(--scale)) calc(10px * var(--scale));
+  border-bottom: 1px solid var(--line);
+}
+header #title { font-size: 1.25em; font-weight: 700; }
+header #where { margin: 0.2em 0 0; }
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(18px * var(--scale)) calc(28px * var(--scale)) calc(40px * var(--scale));
+  scroll-behavior: smooth;
+}
+#messages::-webkit-scrollbar { width: 8px; }
+#messages::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+.message { margin: 0 0 1.2em; max-width: 52em; }
+.message .meta { color: var(--muted); font-size: 0.75em; margin-bottom: 0.25em; }
+.message.user { margin-left: auto; max-width: 40em; }
+.message.user .body {
+  background: var(--user);
+  padding: 0.6em 0.9em;
+  border-radius: 14px 14px 4px 14px;
+}
+.message.user .meta { text-align: right; }
+.message.assistant .body { padding: 0 0.1em; }
+
+.body p { margin: 0 0 0.7em; }
+.body p:last-child { margin-bottom: 0; }
+.body h1, .body h2, .body h3 { font-size: 1.1em; margin: 1em 0 0.4em; }
+.body ul, .body ol { padding-left: 1.4em; margin: 0.3em 0 0.8em; }
+.body li { margin: 0.15em 0; }
+.body a { color: #7fb0ff; text-decoration: none; }
+.body code {
+  font: 0.88em ui-monospace, "SF Mono", Menlo, monospace;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+}
+.body pre {
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+  margin: 0.6em 0 0.9em;
+}
+.body pre code { background: none; padding: 0; font-size: 0.85em; }
+.body table { border-collapse: collapse; margin: 0.6em 0 0.9em; font-size: 0.92em; }
+.body th, .body td { border: 1px solid var(--line); padding: 0.35em 0.7em; }
+.body th { background: var(--panel); }
+.body blockquote { margin: 0.5em 0; padding-left: 0.9em; border-left: 3px solid var(--line); color: var(--muted); }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+
+.empty { color: var(--muted); margin-top: 3em; text-align: center; }
+
+footer {
+  padding: calc(8px * var(--scale)) calc(28px * var(--scale));
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75em;
+}
