@@ -67,6 +67,7 @@ pub fn run(args: &[String]) -> Result<()> {
                                     about Kuterlapa or the controller.",
                     "inputSchema": { "type": "object", "properties": {} },
                 }));
+                annotate(&mut list);
                 Ok(json!({ "tools": list }))
             }
             "tools/call" => Ok(call(&tools, &params, session.as_deref().unwrap_or("general"))),
@@ -147,6 +148,25 @@ fn ask_user(tool: &str, description: &str, command: &str) -> Result<(), String> 
 
 fn result(text: String, ok: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": !ok })
+}
+
+/// MCP hints for the built-in memory, session and help tools that have
+/// none yet: which only read, and which delete. Tools from files and the
+/// computer tools set their own.
+fn annotate(list: &mut [Value]) {
+    const READ_ONLY: &[&str] = &["memory_read", "memory_search", "session_list", "kuterlapa_help"];
+    const DESTRUCTIVE: &[&str] = &["memory_forget", "session_delete"];
+    for tool in list.iter_mut() {
+        if tool.get("annotations").is_some() {
+            continue;
+        }
+        let name = tool["name"].as_str().unwrap_or_default();
+        let mut hints = json!({ "readOnlyHint": READ_ONLY.contains(&name) });
+        if DESTRUCTIVE.contains(&name) {
+            hints["destructiveHint"] = json!(true);
+        }
+        tool["annotations"] = hints;
+    }
 }
 
 fn memory_schemas() -> Vec<Value> {

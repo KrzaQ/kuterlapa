@@ -1,3 +1,4 @@
 description = "List the names of Google Chrome's profiles."
 command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "profiles"]
 timeout = 10
+read_only = true

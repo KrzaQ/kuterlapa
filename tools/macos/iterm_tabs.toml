@@ -1,3 +1,4 @@
 description = "List iTerm2's windows and tabs: each tab's session name and folder; * marks the active tab. Tabs are numbered window.tab."
 command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "tabs"]
 timeout = 20
+read_only = true

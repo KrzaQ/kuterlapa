@@ -15,6 +15,7 @@
 //!   description = "Set the playback speed of YouTube on the TV."
 //!   command = ["~/bin/youtube", "speed", "{speed}"]
 //!   confirm = false      # ask the user first (A yes, B no); default false
+//!   read_only = false    # it only reads (MCP readOnlyHint); default false
 //!   timeout = 30         # seconds; default 60
 //!
 //!   [params.speed]
@@ -48,6 +49,10 @@ pub struct Tool {
     pub command: Vec<String>,
     #[serde(default)]
     pub confirm: bool,
+    /// The tool only reads; MCP clients and permission classifiers may
+    /// then let it run without a check (readOnlyHint).
+    #[serde(default)]
+    pub read_only: bool,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
     #[serde(default)]
@@ -140,6 +145,7 @@ impl Tool {
             "name": self.name,
             "description": self.description,
             "inputSchema": { "type": "object", "properties": properties, "required": required },
+            "annotations": { "readOnlyHint": self.read_only },
         })
     }
 

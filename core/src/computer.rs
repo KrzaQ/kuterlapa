@@ -120,6 +120,9 @@ const TOOLS: &[(&str, &str, &str)] = &[
 /// Keys that a tool does not require.
 const OPTIONAL: &[&str] = &["how", "amount", "steps"];
 
+/// Tools that only look; the others act on the computer.
+const READ_ONLY: &[&str] = &["computer_ui", "computer_find", "computer_screen", "computer_apps", "computer_windows"];
+
 /// The tool descriptions for MCP tools/list.
 pub fn schemas() -> Vec<Value> {
     TOOLS
@@ -134,6 +137,7 @@ pub fn schemas() -> Vec<Value> {
                 "name": name,
                 "description": description,
                 "inputSchema": { "type": "object", "properties": properties, "required": required },
+                "annotations": { "readOnlyHint": READ_ONLY.contains(name) },
             })
         })
         .collect()
