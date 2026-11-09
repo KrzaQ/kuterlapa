@@ -31,7 +31,7 @@ pub fn run(args: &[String]) -> Result<()> {
     let tools = tools::load(session.as_deref());
     // Actions already done in this request (one engine run), by tool and
     // arguments: see `call`.
-    let mut done = std::collections::HashSet::new();
+    let mut done = Repeats::default();
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -98,26 +98,65 @@ const ONCE: &[&str] = &[
     "session_auto", "session_create", "session_delete", "session_show", "conversation_export", "conversation_show",
 ];
 
+/// What one request did, to catch an action repeated by mistake.
+#[derive(Default)]
+struct Repeats {
+    /// How often each action (tool and arguments) succeeded.
+    times: std::collections::HashMap<String, u32>,
+    /// Repeats the user refused: refused again without asking.
+    refused: std::collections::HashSet<String>,
+}
+
+/// The most times one action may run in one request, even with the user's
+/// agreement.
+const MAX_REPEATS: u32 = 5;
+
 /// Runs a tool call. An action that already succeeded in this request with
-/// the same arguments is refused: a model once read the note it had just
-/// written, took it as a new task, and opened the same page four times.
-/// Keys, clicks and the other computer tools may repeat on purpose.
-fn call(tools: &[Tool], params: &Value, session: &str, done: &mut std::collections::HashSet<String>) -> Value {
-    let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
-    let once = ONCE.contains(&name) || tools.iter().any(|t| t.name == name && !t.read_only);
-    let key = format!("{name} {}", params.get("arguments").cloned().unwrap_or(Value::Null));
-    if once && done.contains(&key) {
-        eprintln!("tool {name}: refused, done already in this request");
-        return result(
-            "Already done in this request with the same arguments. Do not repeat it; the task is done \
-             unless the user asked for it more than once."
-                .into(),
-            false,
-        );
+/// the same arguments runs again only if the model says it means it
+/// ("repeat": true) and the user agrees with A: a model once read the note
+/// it had just written, took it as a new task, and opened the same page
+/// four times, and a permission classifier lets such repeats through.
+/// Keys, clicks and the other computer tools may repeat freely.
+fn call(tools: &[Tool], params: &Value, session: &str, done: &mut Repeats) -> Value {
+    let name = params.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+    let mut params = params.clone();
+    let repeat = params
+        .get_mut("arguments")
+        .and_then(Value::as_object_mut)
+        .and_then(|a| a.remove("repeat"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let once = ONCE.contains(&name.as_str()) || tools.iter().any(|t| t.name == name && !t.read_only);
+    let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
+    let key = format!("{name} {arguments}");
+    let times = done.times.get(&key).copied().unwrap_or(0);
+    if once && times > 0 {
+        if done.refused.contains(&key) {
+            return result("The user refused repeating this. Do not try again.".into(), false);
+        }
+        if !repeat {
+            eprintln!("tool {name}: refused, done already in this request");
+            return result(
+                "Already done in this request with the same arguments. Do not repeat it; the task is done. \
+                 Only if the user really asked for it more than once, call it again with \"repeat\": true; \
+                 the user then confirms."
+                    .into(),
+                false,
+            );
+        }
+        if times >= MAX_REPEATS {
+            return result(format!("Done {times} times already in this request; that is the limit."), false);
+        }
+        let description = tools.iter().find(|t| t.name == name).map(|t| t.description.clone()).unwrap_or_default();
+        let question = format!("Powtórzenie ({}. raz w tej prośbie). {description}", times + 1);
+        if let Err(refusal) = ask_user(&name, &question, &arguments.to_string()) {
+            done.refused.insert(key);
+            return result(refusal, false);
+        }
     }
-    let answer = call_tool(tools, params, session);
+    let answer = call_tool(tools, &params, session);
     if once && answer["isError"] == json!(false) {
-        done.insert(key);
+        *done.times.entry(key).or_default() += 1;
     }
     answer
 }
