@@ -4,6 +4,11 @@
 //! the kuterlapa_help tool (mcp.rs).
 
 use crate::mapping::{Action, Mapping};
+use std::sync::atomic::AtomicBool;
+
+/// True while a panel (the help, the recent sessions) covers the overlay.
+/// The chat and the draft then wait with their views until it closes.
+pub static PANEL: AtomicBool = AtomicBool::new(false);
 use serde_json::{json, Value};
 
 /// Buttons in the order the help lists them.
@@ -170,6 +175,7 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::VoiceToggle => (Model, "tryb lektora", "zmień tryb lektora: wyłączony → czyta odpowiedzi → rozmowa".into()),
         Action::VoiceStop => (Model, "cisza", "ucisz lektora (i zatrzymaj telewizor)".into()),
         Action::Help => (Model, "ta pomoc", "pokaż albo schowaj tę pomoc".into()),
+        Action::Sessions => (Model, "ostatnie sesje", "pokaż albo schowaj ostatnio używane sesje".into()),
         Action::Mouse(how) => match how.as_str() {
             "click" => (Screen, "klik", "klik myszą w miejscu kursora".into()),
             "double-click" => (Screen, "podwójny klik", "podwójny klik w miejscu kursora".into()),

@@ -253,6 +253,7 @@ impl Chat {
     /// thread.
     fn ask(&self, mode: Mode, question: &str, thread: Option<i64>) -> anyhow::Result<(String, Option<i64>)> {
         let session = sessions::current();
+        sessions::touch(&session.name);
         let profile = self.profiles.get();
         let voice = self.state.lock().unwrap().voice;
         let system = system_prompt(mode, &session, voice);
@@ -453,6 +454,10 @@ impl Chat {
     }
 
     fn show(&self) {
+        // A panel covers the overlay; this view shows when it closes.
+        if crate::help::PANEL.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let profile = self.profiles.get().name;
         let session = sessions::current_name();
         let s = self.state.lock().unwrap();

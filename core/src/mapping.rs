@@ -55,6 +55,8 @@ pub enum Action {
     VoiceStop,
     /// Show what each button does, or hide it.
     Help,
+    /// Show the recently used sessions, or hide them.
+    Sessions,
 }
 
 impl Action {
@@ -68,6 +70,7 @@ impl Action {
             "new-conversation" => return Some(Action::NewConversation),
             "voice-stop" => return Some(Action::VoiceStop),
             "help" => return Some(Action::Help),
+            "sessions" => return Some(Action::Sessions),
             _ => {}
         }
         if spec == "draft" {

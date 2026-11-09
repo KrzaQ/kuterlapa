@@ -224,6 +224,12 @@ fn session_schemas() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
         }),
         json!({
+            "name": "session_show",
+            "description": "Show the user the recently used sessions in the overlay (a readable panel), \
+                            when they ask to see their sessions.",
+            "inputSchema": { "type": "object", "properties": {} },
+        }),
+        json!({
             "name": "session_back",
             "description": "Go back to the session before the current one, when the user asks.",
             "inputSchema": { "type": "object", "properties": {} },
@@ -292,6 +298,13 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
         "session_switch" => {
             let name = sessions::switch(text("name"), true)?;
             Ok(format!("Session {name} is current now and stays until the user switches."))
+        }
+        "session_show" => {
+            let answer = socket::request(&paths::core_socket(), "panel sessions")?;
+            if answer != "ok" {
+                anyhow::bail!("{answer}");
+            }
+            Ok("The panel with recent sessions is on screen; B closes it. Do not repeat the list.".into())
         }
         "session_back" => {
             let name = sessions::back()?;

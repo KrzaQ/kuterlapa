@@ -176,6 +176,14 @@ fn handle(state: &Arc<State>, line: &str) -> String {
             state.chat.ask_text(argument);
             "ok".into()
         }
+        // A model asks to show a panel ("panel sessions").
+        "panel" => match argument {
+            "sessions" => {
+                show_panel(state, &sessions::panel());
+                "ok".into()
+            }
+            other => format!("error: no panel {other}"),
+        },
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),
@@ -219,7 +227,14 @@ fn act(state: &Arc<State>, button: &str) -> String {
         Action::EraseDictation { .. } if approvals::answer(false) => "ok".into(),
         Action::Help => {
             if !hide_help(state) {
-                show_help(state);
+                let overlay = help::overlay(&mut state.mapping.lock().unwrap());
+                show_panel(state, &overlay);
+            }
+            "ok".into()
+        }
+        Action::Sessions => {
+            if !hide_help(state) {
+                show_panel(state, &sessions::panel());
             }
             "ok".into()
         }
@@ -329,12 +344,14 @@ fn act(state: &Arc<State>, button: &str) -> String {
 /// How long the help stays without a button.
 const HELP_TIME: std::time::Duration = std::time::Duration::from_secs(30);
 
-fn show_help(state: &Arc<State>) {
+/// Shows a panel (the help, the recent sessions) until B, the same button,
+/// or HELP_TIME.
+fn show_panel(state: &Arc<State>, overlay: &serde_json::Value) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let number = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     *state.help.lock().unwrap() = Some(number);
-    let overlay = help::overlay(&mut state.mapping.lock().unwrap());
-    shell::overlay(&overlay);
+    help::PANEL.store(true, std::sync::atomic::Ordering::Relaxed);
+    shell::overlay(overlay);
     let state = Arc::clone(state);
     thread::spawn(move || {
         thread::sleep(HELP_TIME);
@@ -350,6 +367,7 @@ fn hide_help(state: &State) -> bool {
     if state.help.lock().unwrap().take().is_none() {
         return false;
     }
+    help::PANEL.store(false, std::sync::atomic::Ordering::Relaxed);
     if state.draft.active() {
         state.draft.refresh();
     } else {

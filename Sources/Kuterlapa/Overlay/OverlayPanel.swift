@@ -24,7 +24,9 @@ final class OverlayPanel {
     private var lastState: [String: Any]?
     private var width: CGFloat { 440 * scale }
     /// The help needs room for two columns.
-    private var helpWidth: CGFloat { 640 * scale }
+    private var helpWidth: CGFloat { (panelWidth ?? 640) * scale }
+    /// A panel's own width, before scaling ("width" in the state).
+    private var panelWidth: CGFloat?
     private let margin: CGFloat = 12
 
     init() {
@@ -129,8 +131,9 @@ final class OverlayPanel {
         set(detailLabel, state["detail"])
         set(hintLabel, state["hint"])
         let help = state["help"] as? [[String: Any]] ?? []
+        panelWidth = (state["width"] as? Double).map { CGFloat($0) }
         setWidth(help.isEmpty ? width : helpWidth)
-        setHelp(help)
+        setHelp(help, keyWidth: (state["help_key_width"] as? Double).map { CGFloat($0) } ?? 126)
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
         if let countdown = state["countdown"] as? [String: Any],
            let ends = countdown["ends"] as? Double, let total = countdown["total"] as? Double, total > 0 {
@@ -168,7 +171,8 @@ final class OverlayPanel {
     /// The help: groups of rows, each with keys and a short text, in two
     /// columns of about the same length.
     /// "help": [{"title": "Mówienie", "rows": [{"keys": "X ×2", "text": "nowy szkic"}]}]
-    private func setHelp(_ groups: [[String: Any]]) {
+    /// "help_key_width": the width of the keys column (default 126).
+    private func setHelp(_ groups: [[String: Any]], keyWidth: CGFloat) {
         for view in helpView.arrangedSubviews {
             helpView.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -183,7 +187,8 @@ final class OverlayPanel {
             filled += sizes[split]
             split += 1
         }
-        let columnWidth = (helpWidth - 28 - helpView.spacing) / 2
+        // One group takes the whole width; more share two columns.
+        let columnWidth = groups.count == 1 ? helpWidth - 28 : (helpWidth - 28 - helpView.spacing) / 2
         for part in [groups[..<max(split, 1)], groups[max(split, 1)...]] where !part.isEmpty {
             let column = NSStackView()
             column.orientation = .vertical
@@ -200,7 +205,8 @@ final class OverlayPanel {
                 for row in group["rows"] as? [[String: Any]] ?? [] {
                     column.addArrangedSubview(OverlayPanel.helpRow(keys: row["keys"] as? String ?? "",
                                                                    text: row["text"] as? String ?? "",
-                                                                   width: columnWidth, scale: scale))
+                                                                   width: columnWidth, keyWidth: keyWidth,
+                                                                   scale: scale))
                 }
             }
             column.widthAnchor.constraint(equalToConstant: columnWidth).isActive = true
@@ -209,14 +215,15 @@ final class OverlayPanel {
     }
 
     /// One help row: the keys as small key caps, then what they do.
-    private static func helpRow(keys: String, text: String, width: CGFloat, scale: CGFloat) -> NSView {
+    private static func helpRow(keys: String, text: String, width: CGFloat, keyWidth: CGFloat,
+                                scale: CGFloat) -> NSView {
         let caps = NSStackView()
         caps.orientation = .horizontal
         caps.spacing = 4
         for key in keys.components(separatedBy: " · ") {
             caps.addArrangedSubview(keyCap(key, scale: scale))
         }
-        let keyColumn: CGFloat = 126 * scale
+        let keyColumn: CGFloat = keyWidth * scale
         caps.widthAnchor.constraint(equalToConstant: keyColumn).isActive = true
         caps.setHuggingPriority(.required, for: .horizontal)
         caps.addArrangedSubview(NSView())  // pushes the caps to the left

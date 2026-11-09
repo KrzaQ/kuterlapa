@@ -21,5 +21,6 @@
   "-": "voice-stop",
   "R": "click",
   "+ double": "help",
-  "Share double": "help"
+  "Share double": "help",
+  "+ hold": "sessions"
 }

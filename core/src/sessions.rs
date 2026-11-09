@@ -75,7 +75,86 @@ fn set_current(name: &str) -> Result<()> {
         fs::write(previous_file(), format!("{old}\n"))?;
     }
     fs::write(state_file(), format!("{name}\n"))?;
+    touch(name);
     Ok(())
+}
+
+fn times_file() -> PathBuf {
+    paths::state_dir().join("session-times.json")
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default()
+}
+
+fn times() -> std::collections::BTreeMap<String, u64> {
+    fs::read_to_string(times_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+/// Notes that a session was used now: a message, or a switch to it.
+pub fn touch(name: &str) {
+    let mut all = times();
+    all.insert(name.to_string(), now());
+    if let Ok(text) = serde_json::to_string_pretty(&all) {
+        let _ = fs::write(times_file(), text);
+    }
+}
+
+/// Sessions with the time they were last used, most recent first.
+pub fn recent() -> Vec<(Session, Option<u64>)> {
+    let used = times();
+    let mut list: Vec<(Session, Option<u64>)> = all()
+        .into_iter()
+        .map(|s| {
+            let at = used.get(&s.name).copied();
+            (s, at)
+        })
+        .collect();
+    list.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.name.cmp(&b.0.name)));
+    list
+}
+
+/// "przed chwilą", "5 min temu", "3 godz. temu", "wczoraj", "4 dni temu".
+pub fn ago(at: Option<u64>) -> String {
+    let Some(at) = at else { return "nieużywana".into() };
+    let s = now().saturating_sub(at);
+    match s {
+        0..=59 => "przed chwilą".into(),
+        60..=3599 => format!("{} min temu", s / 60),
+        3600..=86_399 => format!("{} godz. temu", s / 3600),
+        86_400..=172_799 => "wczoraj".into(),
+        _ => format!("{} dni temu", s / 86_400),
+    }
+}
+
+/// The overlay state of the recent sessions panel, in the help's layout.
+pub fn panel() -> serde_json::Value {
+    let current = current_name();
+    let rows: Vec<serde_json::Value> = recent()
+        .into_iter()
+        .take(12)
+        .map(|(s, at)| {
+            // The first line of the context that is not a heading.
+            let about = s.context.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with('#')).unwrap_or("");
+            let about: String = about.chars().take(56).collect();
+            let mark = if s.name == current { "● teraz · " } else { "" };
+            let when = if s.name == current { String::new() } else { ago(at) };
+            let text = [when, about].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" · ");
+            serde_json::json!({ "keys": s.label, "text": format!("{mark}{text}") })
+        })
+        .collect();
+    let mode = if automatic() { "wybiera okno (auto)" } else { "lepka" };
+    serde_json::json!({
+        "visible": true,
+        "title": format!("Sesje · bieżąca: {current} · {mode}"),
+        "help": [{ "title": "Ostatnio używane", "rows": rows }],
+        "help_key_width": 120,
+        "width": 560,
+        "hint": "Powiedz: „przejdź do sesji …” · B: zamknij · zamyka się sama po 30 s",
+    })
 }
 
 /// Goes back to the session before the current one; it stays (sticky).

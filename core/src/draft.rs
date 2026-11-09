@@ -220,6 +220,10 @@ impl Draft {
     }
 
     fn show(&self) {
+        // A panel covers the overlay; this view shows when it closes.
+        if crate::help::PANEL.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let profile = self.profile().name;
         let s = self.state.lock().unwrap();
         let draft = s.recording || s.busy || !s.text.is_empty() || s.error.is_some();
