@@ -174,6 +174,20 @@ fn send(view: &View, follow: bool) {
         None => (Vec::new(), json!({ "kind": "", "index": 0, "count": 0 })),
     };
     let focus_index = focus.and_then(|id| messages.iter().position(|m| m.id == id));
+    // The session's items for the side list, newest first.
+    let shown_items: Vec<_> = list
+        .iter()
+        .enumerate()
+        .rev()
+        .take(20)
+        .map(|(i, it)| {
+            let command = matches!(it.kind, Kind::Command);
+            let title = view.store.first_question(it.id, command).unwrap_or_default();
+            let title: String = title.chars().take(60).collect();
+            json!({ "kind": if command { "Polecenie" } else { "Rozmowa" }, "title": title,
+                    "created": it.created, "current": i == index })
+        })
+        .collect();
     let messages: Vec<_> = messages
         .into_iter()
         .map(|m| json!({ "role": m.role, "text": m.text, "profile": m.profile, "created": m.created }))
@@ -196,6 +210,7 @@ fn send(view: &View, follow: bool) {
         "automatic": sessions::automatic(),
         "conversation": item,
         "sessions": sessions_list,
+        "items": shown_items,
         "messages": messages,
         "focus": focus_index,
         "follow": follow && focus_index.is_none(),

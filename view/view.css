@@ -25,13 +25,16 @@ html, body {
 body { display: flex; }
 
 aside {
-  width: calc(230px * var(--scale));
+  width: calc(280px * var(--scale));
   flex: none;
   background: var(--panel);
   border-right: 1px solid var(--line);
   padding: calc(18px * var(--scale)) calc(14px * var(--scale));
-  overflow: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
+aside h2:not(:first-child) { margin-top: 1.4em; }
 
 aside h2, header #where {
   margin: 0 0 0.8em;
@@ -48,6 +51,20 @@ aside h2, header #where {
 #session-list li.current { background: rgba(240, 160, 75, 0.16); }
 #session-list li.current .name::before { content: "● "; color: var(--accent); }
 #session-list li.shown { background: rgba(255, 255, 255, 0.08); }
+
+#item-list { list-style: none; margin: 0; padding: 0; }
+#item-list li { padding: 0.4em 0.6em; border-radius: 8px; margin-bottom: 0.15em; border-left: 3px solid transparent; }
+#item-list li .title {
+  display: block;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#item-list li .when { display: block; color: var(--muted); font-size: 0.72em; }
+#item-list li.command { border-left-color: rgba(127, 176, 255, 0.5); }
+#item-list li.conversation { border-left-color: rgba(240, 160, 75, 0.5); }
+#item-list li.current { background: rgba(240, 160, 75, 0.16); }
 
 .message.focus { outline: 2px solid var(--accent); outline-offset: 8px; border-radius: 10px; }
 

@@ -188,6 +188,18 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The first thing the user said in a conversation (`command` false) or
+    /// a command thread, as its title.
+    pub fn first_question(&self, id: i64, command: bool) -> Result<String> {
+        let db = self.db.lock().unwrap();
+        let sql = if command {
+            "SELECT text FROM commands WHERE thread = ?1 AND role = 'user' ORDER BY id LIMIT 1"
+        } else {
+            "SELECT text FROM messages WHERE conversation = ?1 AND role = 'user' ORDER BY id LIMIT 1"
+        };
+        Ok(db.query_row(sql, params![id], |r| r.get(0)).optional()?.unwrap_or_default())
+    }
+
     /// The session and conversation of a message.
     pub fn message_place(&self, id: i64) -> Result<Option<(String, i64)>> {
         let db = self.db.lock().unwrap();

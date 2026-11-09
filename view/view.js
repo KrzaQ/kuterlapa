@@ -7,7 +7,8 @@
 //   conversation: { kind: "Rozmowa" | "Polecenie", index: 3, count: 5, created: "2026-11-08 19:57" },
 //   other_session: false,  // the view shows another session than the current
 //   focus: 4,              // a message to scroll to and mark, or null
-//   sessions: [{ name, label, current, when }],
+//   sessions: [{ name, label, current, shown, when }],
+//   items: [{ kind, title, created, current }],  // the session's, newest first
 //   messages: [{ role: "user" | "assistant", text, profile, created }],
 //   follow: true   // scroll to the newest message
 // }
@@ -69,6 +70,19 @@ function render(state) {
     li.innerHTML = `<span class="name">${escapeHtml(s.label)}</span><span class="when">${escapeHtml(s.when || "")}</span>`;
     list.appendChild(li);
   }
+
+  const items = $("item-list");
+  items.innerHTML = "";
+  for (const it of state.items || []) {
+    const li = document.createElement("li");
+    li.className = (it.current ? "current " : "") + (it.kind === "Polecenie" ? "command" : "conversation");
+    const day = (it.created || "").slice(5);
+    li.innerHTML = `<span class="title">${escapeHtml(it.title || "(bez pytania)")}</span>` +
+      `<span class="when">${escapeHtml(it.kind)} · ${escapeHtml(day)}</span>`;
+    items.appendChild(li);
+  }
+  const current = items.querySelector("li.current");
+  if (current) current.scrollIntoView({ block: "nearest" });
 
   const c = state.conversation || {};
   $("title").textContent = (state.label || state.session || "") + (state.other_session ? " (inna sesja)" : "");
