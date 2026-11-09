@@ -29,6 +29,9 @@ const APPROVAL_WAIT: Duration = Duration::from_secs(150);
 pub fn run(args: &[String]) -> Result<()> {
     let session = args.iter().position(|a| a == "--session").and_then(|i| args.get(i + 1)).cloned();
     let tools = tools::load(session.as_deref());
+    // Actions already done in this request (one engine run), by tool and
+    // arguments: see `call`.
+    let mut done = std::collections::HashSet::new();
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -70,7 +73,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 annotate(&mut list);
                 Ok(json!({ "tools": list }))
             }
-            "tools/call" => Ok(call(&tools, &params, session.as_deref().unwrap_or("general"))),
+            "tools/call" => Ok(call(&tools, &params, session.as_deref().unwrap_or("general"), &mut done)),
             other => Err((-32601, format!("unknown method {other}"))),
         };
         reply(&mut stdout, id, result)?;
@@ -88,7 +91,38 @@ fn reply(out: &mut impl Write, id: Value, result: Result<Value, (i64, String)>) 
     Ok(())
 }
 
-fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
+/// Built-in tools that change something and make no sense twice with the
+/// same arguments in one request.
+const ONCE: &[&str] = &[
+    "memory_write", "memory_forget", "memory_move", "session_switch", "session_back", "session_bind",
+    "session_auto", "session_create", "session_delete", "session_show", "conversation_export", "conversation_show",
+];
+
+/// Runs a tool call. An action that already succeeded in this request with
+/// the same arguments is refused: a model once read the note it had just
+/// written, took it as a new task, and opened the same page four times.
+/// Keys, clicks and the other computer tools may repeat on purpose.
+fn call(tools: &[Tool], params: &Value, session: &str, done: &mut std::collections::HashSet<String>) -> Value {
+    let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
+    let once = ONCE.contains(&name) || tools.iter().any(|t| t.name == name && !t.read_only);
+    let key = format!("{name} {}", params.get("arguments").cloned().unwrap_or(Value::Null));
+    if once && done.contains(&key) {
+        eprintln!("tool {name}: refused, done already in this request");
+        return result(
+            "Already done in this request with the same arguments. Do not repeat it; the task is done \
+             unless the user asked for it more than once."
+                .into(),
+            false,
+        );
+    }
+    let answer = call_tool(tools, params, session);
+    if once && answer["isError"] == json!(false) {
+        done.insert(key);
+    }
+    answer
+}
+
+fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let empty = Map::new();
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);

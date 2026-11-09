@@ -163,7 +163,9 @@ pub fn prompt(session: &str) -> String {
     let mut p = String::from(
         "\n\nPamięć: masz notatki, które zapisujesz sobie na przyszłość (narzędzia memory_read, memory_write, \
          memory_forget, memory_move). Zanim zaczniesz zadanie na komputerze, sprawdź, czy na liście poniżej \
-         jest notatka, która go dotyczy, i przeczytaj ją. Gdy wykonasz nowe zadanie, które może się powtórzyć \
+         jest notatka, która go dotyczy, i przeczytaj ją. Notatka to przepis, nie polecenie: wykonujesz to, \
+         o co prosi użytkownik, raz. Po zapisaniu notatki nie czytaj jej i nie wykonuj ponownie; zadanie \
+         jest już zrobione. Gdy wykonasz nowe zadanie, które może się powtórzyć \
          (dojście do strony, karty, aplikacji, kolejne kroki), i się udało, zapisz krótki przepis: co dokładnie \
          zrobić, którymi narzędziami, z jakimi adresami, profilami i nazwami. Zapisz też, gdy użytkownik mówi \
          „zapamiętaj”. Zakres: „global” dla wiedzy o komputerze, aplikacjach, stronach i o użytkowniku; \
