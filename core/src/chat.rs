@@ -275,6 +275,7 @@ impl Chat {
                     None => Vec::new(),
                 };
                 let thread = self.store.add_command(thread, Some(&session.name), "user", question, None)?;
+                crate::view::changed();
                 let answer =
                     engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name))?;
                 self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name))?;

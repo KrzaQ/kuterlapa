@@ -4,7 +4,9 @@
 // state = {
 //   scale: 1.3,
 //   session: "kuterlapa", label: "Kuterłapa", automatic: false,
-//   conversation: { index: 3, count: 5, created: "2026-11-08 19:57" },
+//   conversation: { kind: "Rozmowa" | "Polecenie", index: 3, count: 5, created: "2026-11-08 19:57" },
+//   other_session: false,  // the view shows another session than the current
+//   focus: 4,              // a message to scroll to and mark, or null
 //   sessions: [{ name, label, current, when }],
 //   messages: [{ role: "user" | "assistant", text, profile, created }],
 //   follow: true   // scroll to the newest message
@@ -63,16 +65,16 @@ function render(state) {
   list.innerHTML = "";
   for (const s of state.sessions || []) {
     const li = document.createElement("li");
-    if (s.current) li.className = "current";
+    if (s.shown) li.className = s.current ? "current" : "shown";
     li.innerHTML = `<span class="name">${escapeHtml(s.label)}</span><span class="when">${escapeHtml(s.when || "")}</span>`;
     list.appendChild(li);
   }
 
   const c = state.conversation || {};
-  $("title").textContent = state.label || state.session || "";
+  $("title").textContent = (state.label || state.session || "") + (state.other_session ? " (inna sesja)" : "");
   const mode = state.automatic ? " · sesja z okna" : "";
   $("where").textContent = c.count
-    ? `Rozmowa ${c.index} z ${c.count} · od ${c.created || "?"}${mode}`
+    ? `${c.kind} · ${c.index} z ${c.count} · od ${c.created || "?"}${mode}`
     : `Brak rozmów${mode}`;
 
   const box = $("messages");
@@ -81,8 +83,16 @@ function render(state) {
   if (!(state.messages || []).length) {
     box.innerHTML = '<div class="empty">Tu pojawi się rozmowa. Naciśnij Y i mów.</div>';
   }
-  for (const m of state.messages || []) box.appendChild(message(m));
-  if (state.follow || atEnd) {
+  const nodes = (state.messages || []).map(message);
+  nodes.forEach((n) => box.appendChild(n));
+  if (Number.isInteger(state.focus) && nodes[state.focus]) {
+    // A message a model found: in the middle of the view, marked.
+    const found = nodes[state.focus];
+    found.classList.add("focus");
+    box.style.scrollBehavior = "auto";
+    box.scrollTop = found.offsetTop - box.offsetTop - box.clientHeight / 3;
+    box.style.scrollBehavior = "";
+  } else if (state.follow || atEnd) {
     box.style.scrollBehavior = "auto";
     box.scrollTop = box.scrollHeight;
     box.style.scrollBehavior = "";

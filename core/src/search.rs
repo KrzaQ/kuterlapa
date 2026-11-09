@@ -82,6 +82,24 @@ fn index(store: &Store, items: &[Item]) -> Result<()> {
     Ok(())
 }
 
+/// The message closest in meaning to `query`: its id, where it is, and its
+/// text.
+pub fn best_message(store: &Store, query: &str) -> Result<Option<(i64, String, String)>> {
+    let items = items(store)?;
+    index(store, &items)?;
+    let query = embed::vectors(&[query.to_string()], true)?.remove(0);
+    let vectors = store.embeddings()?;
+    let best = items
+        .iter()
+        .filter(|i| i.key.starts_with("msg:"))
+        .filter_map(|i| Some((vectors.get(&i.key)?.iter().zip(&query).map(|(a, b)| a * b).sum::<f32>(), i)))
+        .max_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(best.and_then(|(_, item)| {
+        let id = item.key.strip_prefix("msg:")?.parse().ok()?;
+        Some((id, item.label.clone(), item.text.chars().take(300).collect()))
+    }))
+}
+
 /// The `limit` items closest in meaning to `query`, as text for a model.
 pub fn search(store: &Store, query: &str, limit: usize) -> Result<String> {
     let items = items(store)?;

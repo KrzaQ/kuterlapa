@@ -100,7 +100,7 @@ fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
         };
         return result(text, ok);
     }
-    if name.starts_with("session_") || name == "conversation_export" {
+    if name.starts_with("session_") || name.starts_with("conversation_") {
         eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
         let (text, ok) = match session_call(name, arguments) {
             Ok(text) => (text, true),
@@ -269,6 +269,14 @@ fn session_schemas() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
         }),
         json!({
+            "name": "conversation_show",
+            "description": "Open the large chat view at the past message closest in meaning to the query, \
+                            scrolled to it and marked, when the user wants to see where something was said \
+                            (\"show me where we talked about …\"). Answers with the message it found.",
+            "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] },
+            "annotations": { "readOnlyHint": true },
+        }),
+        json!({
             "name": "conversation_export",
             "description": "Save conversations as Markdown files in ~/Documents/Kuterlapa/<session>/, when \
                             the user asks: the newest conversation of a session, or all of them. Answers \
@@ -360,6 +368,17 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
         "session_switch" => {
             let name = sessions::switch(text("name"), true)?;
             Ok(format!("Session {name} is current now and stays until the user switches."))
+        }
+        "conversation_show" => {
+            let store = crate::store::Store::open()?;
+            let Some((id, label, found)) = crate::search::best_message(&store, text("query"))? else {
+                anyhow::bail!("no messages to search yet");
+            };
+            let answer = socket::request(&paths::core_socket(), &format!("view-open {id}"))?;
+            if answer != "ok" {
+                anyhow::bail!("{answer}");
+            }
+            Ok(format!("The chat view shows it ({label}): {found}\nDo not repeat it at length."))
         }
         "conversation_export" => {
             let store = crate::store::Store::open()?;

@@ -178,6 +178,11 @@ fn handle(state: &Arc<State>, line: &str) -> String {
             state.chat.ask_text(argument);
             "ok".into()
         }
+        // A model opens the chat view at a message it found.
+        "view-open" => match argument.trim().parse::<i64>() {
+            Ok(id) if view::open_at(id) => "ok".into(),
+            _ => format!("error: no message {argument}"),
+        },
         // A model asks to show a panel ("panel sessions").
         "panel" => match argument {
             "sessions" => {

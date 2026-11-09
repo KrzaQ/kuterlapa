@@ -22,9 +22,9 @@ fn folder(session: &str) -> PathBuf {
 fn write(store: &Store, session: &sessions::Session, id: i64, created: &str) -> Result<PathBuf> {
     let messages = store.messages_full(id, usize::MAX >> 1)?;
     let mut md = format!("# {} · rozmowa {id}\n\n_Od {created}_\n", session.label);
-    for (role, text, profile, at) in messages {
-        let who = if role == "user" { "Ty".to_string() } else { profile.unwrap_or_else(|| "Model".into()) };
-        md.push_str(&format!("\n---\n\n**{who}** · {at}\n\n{}\n", text.trim()));
+    for m in messages {
+        let who = if m.role == "user" { "Ty".to_string() } else { m.profile.unwrap_or_else(|| "Model".into()) };
+        md.push_str(&format!("\n---\n\n**{who}** · {}\n\n{}\n", m.created, m.text.trim()));
     }
     let dir = folder(&session.name);
     fs::create_dir_all(&dir)?;

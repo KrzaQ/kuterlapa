@@ -53,6 +53,20 @@ pub struct Store {
     db: Mutex<Connection>,
 }
 
+/// A message with everything the chat view and the export show.
+#[derive(Debug, Clone)]
+pub struct FullMessage {
+    pub id: i64,
+    pub role: String,
+    pub text: String,
+    pub profile: Option<String>,
+    pub created: String,
+}
+
+fn full_message(r: &rusqlite::Row) -> rusqlite::Result<FullMessage> {
+    Ok(FullMessage { id: r.get(0)?, role: r.get(1)?, text: r.get(2)?, profile: r.get(3)?, created: r.get(4)? })
+}
+
 #[derive(Debug, Clone)]
 pub struct Message {
     pub role: String,
@@ -136,18 +150,54 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// A conversation's messages for the chat view: role, text, profile and
-    /// time (local), oldest first, at most `limit` of the newest.
-    pub fn messages_full(&self, conversation: i64, limit: usize) -> Result<Vec<(String, String, Option<String>, String)>> {
+    /// A conversation's messages for the chat view and export: id, role,
+    /// text, profile and time (local), oldest first, at most `limit` of the
+    /// newest.
+    pub fn messages_full(&self, conversation: i64, limit: usize) -> Result<Vec<FullMessage>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime') FROM (
+            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime') FROM (
                  SELECT id, role, text, profile, created FROM messages WHERE conversation = ?1
                  ORDER BY id DESC LIMIT ?2)
              ORDER BY id",
         )?;
-        let rows = stmt.query_map(params![conversation, limit as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        let rows = stmt.query_map(params![conversation, limit as i64], full_message)?;
         Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The command threads that saw a session's context, oldest first, with
+    /// when each started (local time).
+    pub fn threads(&self, session: &str) -> Result<Vec<(i64, String)>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT thread, strftime('%Y-%m-%d %H:%M', MIN(created), 'localtime') FROM commands
+             WHERE context_session = ?1 GROUP BY thread ORDER BY MIN(id)",
+        )?;
+        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// A command thread's messages, like `messages_full`.
+    pub fn thread_full(&self, thread: i64) -> Result<Vec<FullMessage>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT id, role, text, profile, strftime('%Y-%m-%d %H:%M', created, 'localtime')
+             FROM commands WHERE thread = ?1 ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![thread], full_message)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The session and conversation of a message.
+    pub fn message_place(&self, id: i64) -> Result<Option<(String, i64)>> {
+        let db = self.db.lock().unwrap();
+        Ok(db
+            .query_row(
+                "SELECT c.session, c.id FROM messages m JOIN conversations c ON c.id = m.conversation WHERE m.id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?)
     }
 
     /// All messages for search: id, session, role, text, time (local).
