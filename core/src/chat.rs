@@ -504,10 +504,12 @@ impl Chat {
             shell::overlay(&json!({ "visible": false }));
             return;
         }
-        let kind = match (s.mode, s.thread.is_some() && s.recording) {
-            (Mode::Conversation, _) => "Rozmowa",
-            (Mode::Command, true) => "Ciąg dalszy polecenia",
-            (Mode::Command, false) => "Polecenie",
+        // A badge says what kind of exchange this is; a one-off command is
+        // temporary, so the overlay draws a dashed frame around it.
+        let (badge, tone) = match (s.mode, s.thread.is_some()) {
+            (Mode::Conversation, _) => ("ROZMOWA", "conversation"),
+            (Mode::Command, true) => ("POLECENIE · CIĄG DALSZY", "command"),
+            (Mode::Command, false) => ("POLECENIE · JEDNORAZOWE", "command"),
         };
         let speaker = match s.voice {
             VoiceMode::Off => "",
@@ -515,7 +517,7 @@ impl Chat {
             VoiceMode::Talk => " · 🗣",
         };
         let picked = if sessions::automatic() { " (auto)" } else { "" };
-        let title = format!("{kind} · {session}{picked} · {profile}{speaker}");
+        let title = format!("{session}{picked} · {profile}{speaker}");
         let status = if let Some(note) = &s.note {
             note.clone()
         } else if s.recording {
@@ -549,7 +551,13 @@ impl Chat {
         } else {
             "Y: dalej · Y Y: polecenie · B: zamknij"
         };
-        let mut state = json!({ "visible": true, "title": title, "status": status, "text": text, "hint": hint });
+        let mut state = json!({
+            "visible": true, "title": title, "status": status, "text": text, "hint": hint,
+            "badge": { "text": badge, "tone": tone },
+        });
+        if s.mode == Mode::Command {
+            state["frame"] = json!("dashed");
+        }
         if let Some((ends, total)) = s.countdown {
             state["countdown"] = json!({ "ends": ends, "total": total });
         }

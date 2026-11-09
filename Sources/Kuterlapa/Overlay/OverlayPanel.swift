@@ -15,6 +15,11 @@ final class OverlayPanel {
     private let detailLabel = OverlayPanel.label(size: 12, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
     private let countdownBar = CountdownBar()
+    private let badge = Badge()
+    private var titleRow: NSStackView!
+    /// A dashed line around the panel: something temporary (a one-off
+    /// command), unlike the solid frame of a question.
+    private let dashes = CAShapeLayer()
     private let helpView = NSStackView()
     private var background: NSVisualEffectView!
     private var widthConstraint: NSLayoutConstraint!
@@ -58,7 +63,13 @@ final class OverlayPanel {
         helpView.spacing = 28
         helpView.isHidden = true
 
-        let stack = NSStackView(views: [titleLabel, statusLabel, countdownBar, headingLabel, textLabel, detailLabel,
+        titleRow = NSStackView(views: [badge, titleLabel])
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .centerY
+        titleRow.spacing = 8
+        badge.isHidden = true
+
+        let stack = NSStackView(views: [titleRow, statusLabel, countdownBar, headingLabel, textLabel, detailLabel,
                                         helpView, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -79,6 +90,11 @@ final class OverlayPanel {
         widthConstraint.isActive = true
         countdownBar.isHidden = true
         setWidth(width)
+        dashes.fillColor = nil
+        dashes.lineWidth = 1.5
+        dashes.lineDashPattern = [7, 5]
+        dashes.isHidden = true
+        background.layer?.addSublayer(dashes)
         panel.contentView = background
         applyFonts()
     }
@@ -115,6 +131,10 @@ final class OverlayPanel {
     ///
     /// While the user pauses in a chat message, a bar shrinks until the
     /// message sends itself: "countdown": {"ends": <Unix time>, "total": <s>}.
+    ///
+    /// What kind of exchange this is: "badge": {"text": "ROZMOWA", "tone":
+    /// "conversation" | "command"}, and "frame": "dashed" for something
+    /// temporary.
     func update(_ state: [String: Any]) {
         lastState = state
         guard state["visible"] as? Bool == true else {
@@ -141,6 +161,9 @@ final class OverlayPanel {
         } else {
             countdownBar.stop()
         }
+        let kind = state["badge"] as? [String: Any]
+        badge.set(text: kind?["text"] as? String ?? "", tone: kind?["tone"] as? String ?? "", scale: scale)
+        let dashed = state["frame"] as? String == "dashed"
         let attention = state["attention"] as? Bool == true
         background.layer?.borderWidth = attention ? 2 : 0
         background.layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.8).cgColor
@@ -154,6 +177,12 @@ final class OverlayPanel {
         let height = min(size.height, screen.height - 2 * margin)
         panel.setFrame(NSRect(x: screen.maxX - size.width - margin, y: screen.maxY - height - margin,
                               width: size.width, height: height), display: true)
+        dashes.isHidden = !dashed || attention
+        if dashed {
+            dashes.strokeColor = Badge.color("command").withAlphaComponent(0.85).cgColor
+            let inset = background.bounds.insetBy(dx: 1.5, dy: 1.5)
+            dashes.path = CGPath(roundedRect: inset, cornerWidth: 11, cornerHeight: 11, transform: nil)
+        }
         panel.orderFrontRegardless()
     }
 
@@ -362,5 +391,47 @@ final class CountdownBar: NSView {
         CATransaction.setDisableActions(true)
         fill.frame = CGRect(x: 0, y: 0, width: bounds.width * left, height: bounds.height)
         CATransaction.commit()
+    }
+}
+
+/// A small colored label before the title: what kind of exchange the panel
+/// shows (a saved conversation, a one-off command).
+final class Badge: NSView {
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    static func color(_ tone: String) -> NSColor {
+        switch tone {
+        case "command": return NSColor(calibratedRed: 0.50, green: 0.69, blue: 1.0, alpha: 1)
+        default: return NSColor.systemOrange
+        }
+    }
+
+    func set(text: String, tone: String, scale: CGFloat) {
+        isHidden = text.isEmpty
+        guard !text.isEmpty else { return }
+        let color = Badge.color(tone)
+        label.stringValue = text
+        label.font = .systemFont(ofSize: 10 * scale, weight: .bold)
+        label.textColor = color
+        layer?.backgroundColor = color.withAlphaComponent(0.18).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = color.withAlphaComponent(0.45).cgColor
     }
 }
