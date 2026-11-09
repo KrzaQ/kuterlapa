@@ -21,6 +21,8 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     let question: Value = serde_json::from_str(question).unwrap_or(Value::Null);
     let text = |key: &str| question.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
     let (tool, description, command) = (text("tool"), text("description"), text("command"));
+    // A model's own yes-or-no question (ask_user), not a tool waiting.
+    let question_only = text("kind") == "question";
     let (sender, receiver) = mpsc::channel();
     {
         let mut pending = PENDING.lock().unwrap();
@@ -31,10 +33,10 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     }
     shell::overlay(&json!({
         "visible": true,
-        "title": "Zgoda",
+        "title": if question_only { "Pytanie modelu" } else { "Zgoda" },
         "status": "Czekam na Twoją decyzję",
-        "heading": tool.replace('_', " "),
-        "text": description,
+        "heading": if question_only { description.clone() } else { tool.replace('_', " ") },
+        "text": if question_only { String::new() } else { description.clone() },
         "detail": command,
         "buttons": [
             { "key": "A", "label": "Tak", "tone": "yes" },
@@ -43,7 +45,11 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
         "attention": true,
     }));
     if hooks::voice_mode() != "off" {
-        voice::send(&format!("say Czy pozwalasz? {description}"));
+        if question_only {
+            voice::send(&format!("say {description}"));
+        } else {
+            voice::send(&format!("say Czy pozwalasz? {description}"));
+        }
     }
     let answer = receiver.recv_timeout(WAIT);
     PENDING.lock().unwrap().take();

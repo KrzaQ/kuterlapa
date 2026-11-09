@@ -60,6 +60,21 @@ pub fn run(args: &[String]) -> Result<()> {
             "tools/list" => {
                 let mut list: Vec<Value> = tools.iter().map(Tool::schema).collect();
                 list.extend(computer::schemas());
+                list.push(json!({
+                    "name": "ask_user",
+                    "description": "Ask the user a yes-or-no question and wait for the answer: it shows in the \
+                                    overlay with large Yes (A) and No (B) buttons. Use it whenever you need the \
+                                    user to confirm or choose between two options; never write \"A — …, B — …\" \
+                                    in an answer, as the buttons do not answer text. To act only after a yes, put \
+                                    the action in on_yes (a tool name and its arguments): it runs right after the \
+                                    user presses yes, as the user's answer is their permission. Answers yes or no, \
+                                    and the action's result.",
+                    "inputSchema": { "type": "object", "properties": {
+                        "question": { "type": "string", "description": "Short, ending with a question mark" },
+                        "on_yes": { "type": "object", "description": "Optional: {\"name\": tool, \"arguments\": {...}}",
+                            "properties": { "name": { "type": "string" }, "arguments": { "type": "object" } } },
+                    }, "required": ["question"] },
+                }));
                 list.extend(memory_schemas());
                 list.extend(session_schemas());
                 list.push(json!({
@@ -165,6 +180,34 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let empty = Map::new();
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);
+    if name == "ask_user" {
+        let question = arguments.get("question").and_then(Value::as_str).unwrap_or_default();
+        eprintln!("tool ask_user: {question}");
+        let request = json!({ "kind": "question", "tool": "ask_user", "description": question, "command": "" });
+        let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {request}"), APPROVAL_WAIT)
+            .unwrap_or_else(|e| format!("error: {e}"));
+        let text = match answer.as_str() {
+            "yes" => "The user answered: yes.".to_string(),
+            a if a.contains("did not answer") => "The user did not answer.".to_string(),
+            a if a.starts_with("no") => "The user answered: no.".to_string(),
+            other => format!("Could not ask: {other}"),
+        };
+        // The action the question was about runs on yes, with the user's
+        // answer as its permission (a classifier only sees what the user
+        // said, not the button).
+        if let (true, Some(action)) = (answer == "yes", arguments.get("on_yes").filter(|a| a.is_object())) {
+            let action_name = action.get("name").and_then(Value::as_str).unwrap_or_default();
+            if action_name == "ask_user" || action_name.is_empty() {
+                return result(format!("{text} on_yes needs another tool."), false);
+            }
+            let call = json!({ "name": action_name, "arguments": action.get("arguments").cloned().unwrap_or(json!({})) });
+            let done = call_tool(tools, &call, session);
+            let outcome = done["content"][0]["text"].as_str().unwrap_or_default().to_string();
+            let ok = done["isError"] == json!(false);
+            return result(format!("{text} Then {action_name}: {outcome}"), ok);
+        }
+        return result(text, true);
+    }
     if name.starts_with("memory_") {
         eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
         let (text, ok) = match memory_call(name, arguments, session) {
@@ -439,8 +482,10 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
             Ok(out)
         }
         "session_switch" => {
+            let asked = sessions::slug(text("name")).unwrap_or_default();
             let name = sessions::switch(text("name"), true)?;
-            Ok(format!("Session {name} is current now and stays until the user switches."))
+            let note = if name != asked { format!(" (the closest name to \"{}\")", text("name")) } else { String::new() };
+            Ok(format!("Session {name}{note} is current now and stays until the user switches."))
         }
         "conversation_show" => {
             let store = crate::store::Store::open()?;
@@ -463,9 +508,8 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
             Ok(format!("Saved {} file(s):\n{}", list.len(), list.join("\n")))
         }
         "session_delete" => {
-            let plain = sessions::slug(text("name"))?;
-            if plain == sessions::DEFAULT || !sessions::all().iter().any(|s| s.name == plain) {
-                // Let delete explain (no such session, similar names).
+            let plain = sessions::resolve(text("name"))?;
+            if plain == sessions::DEFAULT {
                 sessions::delete(&plain)?;
             }
             ask_user(

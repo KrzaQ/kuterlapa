@@ -290,19 +290,53 @@ pub fn similar(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// The session the user means by `name`. Polish changes word endings
+/// ("sesja … ogólne" is "do sesji … ogólnym"), so when no session has
+/// exactly that name and one is close, that one is meant. Several close
+/// ones, or none: an error that lists them.
+pub fn resolve(name: &str) -> Result<String> {
+    let name = clean(name)?;
+    if name == DEFAULT || dir(&name).is_dir() {
+        return Ok(name);
+    }
+    let same: Vec<String> = all().into_iter().map(|s| s.name).filter(|n| same_words(n, &name)).collect();
+    if same.len() == 1 {
+        return Ok(same[0].clone());
+    }
+    let known: Vec<String> = all().into_iter().map(|s| s.name).collect();
+    let close = similar(&name);
+    let hint = if close.is_empty() {
+        String::new()
+    } else {
+        format!(" Close: {}; ask the user with ask_user whether they mean one of them.", close.join(", "))
+    };
+    bail!(
+        "no session {name}.{hint} All sessions: {}. Do not create one unless the user asks; you may offer it.",
+        known.join(", ")
+    )
+}
+
+/// True when two plain names differ only in word endings, as Polish
+/// grammar changes them: the same number of words, and each pair is the
+/// same or shares a stem of at least 4 letters, with at most 3 letters
+/// after it. Only this sure a match switches a session by itself.
+fn same_words(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<&str>, Vec<&str>) = (a.split('-').collect(), b.split('-').collect());
+    a.len() == b.len()
+        && a.iter().zip(&b).all(|(x, y)| {
+            if x == y {
+                return true;
+            }
+            let stem = x.chars().zip(y.chars()).take_while(|(p, q)| p == q).count();
+            let (short, long) = (x.len().min(y.len()), x.len().max(y.len()));
+            stem >= 4 && stem + 3 >= short && long - stem <= 3
+        })
+}
+
 /// Makes `name` the current session. `sticky`: keep it until the user
 /// switches; otherwise the window in front picks sessions from now on.
 pub fn switch(name: &str, sticky: bool) -> Result<String> {
-    let name = clean(name)?;
-    if name != DEFAULT && !dir(&name).is_dir() {
-        let known: Vec<String> = all().into_iter().map(|s| s.name).collect();
-        let close = similar(&name);
-        let hint = if close.is_empty() { String::new() } else { format!(" Similar: {}.", close.join(", ")) };
-        bail!(
-            "no session {name}.{hint} All sessions: {}. Do not create one unless the user asks; you may offer it.",
-            known.join(", ")
-        );
-    }
+    let name = resolve(name)?;
     set_current(&name)?;
     fs::write(mode_file(), if sticky { "sticky\n" } else { "auto\n" })?;
     Ok(name)
@@ -365,7 +399,7 @@ pub fn create(
 /// Trash. The conversations stay in the history. If it was current,
 /// "general" becomes current.
 pub fn delete(name: &str) -> Result<String> {
-    let name = slug(name)?;
+    let name = resolve(name)?;
     if name == DEFAULT {
         bail!("the general session cannot be deleted");
     }
@@ -531,6 +565,15 @@ mod tests {
         assert_eq!(slug("  Żółć  ").unwrap(), "zolc");
         assert_eq!(slug("Hex-Rays").unwrap(), "hex-rays");
         assert!(slug("!!!").is_err());
+    }
+
+    #[test]
+    fn grammar_endings() {
+        assert!(same_words("sterowanie-komputerem-ogolne", "sterowanie-komputerem-ogolnym"));
+        assert!(same_words("zakupy", "zakupow"));
+        assert!(!same_words("test", "test-okna"));
+        assert!(!same_words("zakupy", "zapis"));
+        assert!(!same_words("dom", "domy"));
     }
 
     #[test]
