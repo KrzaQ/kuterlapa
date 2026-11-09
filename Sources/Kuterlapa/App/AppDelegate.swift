@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shell.start()
         core.start()
         gamepad.start()
+        log(LoginItem.apply())
         statusMenu = StatusMenu(
             status: { [weak self] in self?.statusLines() ?? [] },
             quit: { NSApp.terminate(nil) }

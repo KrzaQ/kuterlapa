@@ -25,9 +25,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(entry)
         }
         menu.addItem(.separator())
+        let login = NSMenuItem(title: "Uruchamiaj przy logowaniu", action: #selector(loginClicked), keyEquivalent: "")
+        login.target = self
+        login.state = LoginItem.enabled ? .on : .off
+        menu.addItem(login)
+        menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Zakończ Kuterlapę", action: #selector(quitClicked), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+    }
+
+    @objc private func loginClicked() {
+        NSLog("%@", LoginItem.set(!LoginItem.enabled))
     }
 
     @objc private func quitClicked() {
