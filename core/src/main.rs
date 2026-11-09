@@ -4,6 +4,9 @@
 //!                               starts it)
 //!   kuterlapa mcp [--session n] serve the tools to a model over MCP (the
 //!                               engine starts it)
+//!   kuterlapa export [session] [--all]
+//!                               write conversations to Markdown files in
+//!                               ~/Documents/Kuterlapa/
 //!   kuterlapa press <button>    act as if a controller button was pressed
 //!   kuterlapa speech <request>  send "toggle" or "cancel" to the speech
 //!                               provider
@@ -23,6 +26,7 @@ mod config;
 mod daemon;
 mod draft;
 mod engines;
+mod export;
 mod gestures;
 mod help;
 mod hooks;
@@ -44,7 +48,7 @@ mod voice;
 
 use anyhow::{bail, Result};
 
-const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] | press <button> | speech <request> | ask <text> | say <text> | voice <request> | type <text> | key <combo> | status";
+const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] | export [session] [--all] | press <button> | speech <request> | ask <text> | say <text> | voice <request> | type <text> | key <combo> | status";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -56,6 +60,7 @@ fn main() -> Result<()> {
     let request = match command.as_str() {
         "daemon" => return daemon::run(config::load()?),
         "mcp" => return mcp::run(rest_args),
+        "export" => return export::run(rest_args),
         "press" => format!("button {rest}"),
         "speech" | "say" | "voice" | "type" | "key" | "ask" => format!("{command} {rest}"),
         "status" => "status".to_string(),

@@ -99,7 +99,7 @@ fn call(tools: &[Tool], params: &Value, session: &str) -> Value {
         };
         return result(text, ok);
     }
-    if name.starts_with("session_") {
+    if name.starts_with("session_") || name == "conversation_export" {
         eprintln!("tool {name}: {}", Value::Object(arguments.clone()));
         let (text, ok) = match session_call(name, arguments) {
             Ok(text) => (text, true),
@@ -234,6 +234,16 @@ fn session_schemas() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
         }),
         json!({
+            "name": "conversation_export",
+            "description": "Save conversations as Markdown files in ~/Documents/Kuterlapa/<session>/, when \
+                            the user asks: the newest conversation of a session, or all of them. Answers \
+                            with the files.",
+            "inputSchema": { "type": "object", "properties": {
+                "session": { "type": "string", "description": "Default: the current session" },
+                "all": { "type": "boolean", "description": "All conversations of the session; default: the newest" },
+            } },
+        }),
+        json!({
             "name": "session_delete",
             "description": "Delete a session, only when the user explicitly asks: its folder (context, notes, \
                             words, window rules) goes to the Trash, its conversations stay in the history. The \
@@ -315,6 +325,15 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
         "session_switch" => {
             let name = sessions::switch(text("name"), true)?;
             Ok(format!("Session {name} is current now and stays until the user switches."))
+        }
+        "conversation_export" => {
+            let store = crate::store::Store::open()?;
+            let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+            let session = Some(text("session")).filter(|s| !s.is_empty());
+            let files = crate::export::export(&store, session, all)?;
+            let home = paths::home().to_string_lossy().into_owned();
+            let list: Vec<String> = files.iter().map(|p| p.display().to_string().replace(&home, "~")).collect();
+            Ok(format!("Saved {} file(s):\n{}", list.len(), list.join("\n")))
         }
         "session_delete" => {
             let plain = sessions::slug(text("name"))?;
