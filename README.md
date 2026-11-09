@@ -5,13 +5,20 @@ and clicking as possible.
 
 Kuterlapa is a menu bar app. A controller button starts dictation; local
 Whisper turns speech into text, sentence by sentence, and Kuterlapa types it
-into the active window. Other buttons send keys (Enter, Escape, Page Up,
-switching desktops) or run commands. The mapping is a JSON file.
+into the active window. Other buttons talk to a language model (Claude
+through Claude Code, or a local model through pi), edit a draft by voice
+before it is sent, read answers aloud, or send keys and run commands. The
+mapping is a JSON file.
 
-Status: early, personal project. Planned next: an overlay that shows the
-dictated text and the answers of a language model (Claude Code or pi with a
-local model), drafts that the model edits on voice commands, and sessions
-tied to projects.
+The models get tools: they can see and use the computer (screenshots, the
+accessibility tree, clicks, keys, windows and desktops), call your own
+programs described by small TOML files, keep notes for later and search
+notes and past conversations by meaning. A tool can ask you first, and
+you answer with a button.
+
+**[See the tour with screenshots](docs/tour.md).**
+
+Status: a personal project, used every day by its first user, on macOS.
 
 ## Parts
 
@@ -25,7 +32,8 @@ Three kinds of processes, so each part can be replaced on its own
 - `Sources/Kuterlapa/`: the macOS shell, `Kuterlapa.app` (Swift, AppKit):
   - `Input/`: game controller buttons,
   - `Output/`: keystrokes and typed text,
-  - `Control/`: Unix sockets,
+  - `Control/`: Unix sockets, and what the models see and do on screen,
+  - `Overlay/`, `View/`: the overlay and the chat view,
   - `App/`: start-up, the core process, the menu bar icon.
   Shells for Linux and Windows can follow; the core does not change.
 - `speech/`: `kuterlapa-speech`, a speech provider (Python, MLX Whisper).
@@ -33,6 +41,13 @@ Three kinds of processes, so each part can be replaced on its own
 - `voice/`: `kuterlapa-voice`, a voice provider that reads text aloud
   (`kuterlapa say "…"`). Backends: macOS `say`, any command, or a local
   mlx-audio model that can clone a voice from a reference clip.
+- `embed/`: `kuterlapa-embed`, an embedding provider for search by
+  meaning. Backends: a local Qwen3-Embedding model (MLX) or any server
+  with the OpenAI embeddings API.
+- `view/`: the chat view, a web page inside the app (marked, KaTeX and
+  highlight.js are included, so it works offline).
+- `tools/macos/`: tools for the models on macOS: Chrome tabs and profiles,
+  iTerm tabs.
 - `config/`: example settings.
 
 ## Requirements
