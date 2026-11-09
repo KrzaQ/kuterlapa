@@ -39,6 +39,7 @@ pub fn run(config: Config) -> Result<()> {
     hooks::start(config.hooks.commands);
     speech::supervise(config.speech.command);
     voice::supervise(config.voice.command);
+    crate::embed::supervise(config.embed.command);
     let store = Arc::new(Store::open()?);
     view::init(Arc::clone(&store));
     let profiles = Arc::new(Current::new());

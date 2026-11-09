@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS commands (
     profile TEXT,
     created TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS embeddings (
+    key TEXT PRIMARY KEY,        -- 'msg:<id>' or 'note:<place>:<name>'
+    hash TEXT NOT NULL,          -- of the text, to notice changes
+    vector BLOB NOT NULL         -- little-endian f32
+);
 CREATE INDEX IF NOT EXISTS messages_by_conversation ON messages(conversation, id);
 CREATE INDEX IF NOT EXISTS commands_by_thread ON commands(thread, id);
 ";
@@ -142,6 +147,46 @@ impl Store {
              ORDER BY id",
         )?;
         let rows = stmt.query_map(params![conversation, limit as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// All messages for search: id, session, role, text, time (local).
+    pub fn all_messages(&self) -> Result<Vec<(i64, String, String, String, String)>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT m.id, c.session, m.role, m.text, strftime('%Y-%m-%d %H:%M', m.created, 'localtime')
+             FROM messages m JOIN conversations c ON c.id = m.conversation ORDER BY m.id",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn embedding_hashes(&self) -> Result<std::collections::HashMap<String, String>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare("SELECT key, hash FROM embeddings")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn put_embedding(&self, key: &str, hash: &str, vector: &[f32]) -> Result<()> {
+        let bytes: Vec<u8> = vector.iter().flat_map(|x| x.to_le_bytes()).collect();
+        let db = self.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO embeddings (key, hash, vector) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET hash = excluded.hash, vector = excluded.vector",
+            params![key, hash, bytes],
+        )?;
+        Ok(())
+    }
+
+    pub fn embeddings(&self) -> Result<std::collections::HashMap<String, Vec<f32>>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare("SELECT key, vector FROM embeddings")?;
+        let rows = stmt.query_map([], |r| {
+            let bytes: Vec<u8> = r.get(1)?;
+            let vector = bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+            Ok((r.get::<_, String>(0)?, vector))
+        })?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 

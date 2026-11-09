@@ -117,6 +117,9 @@ pub fn text(mapping: &mut Mapping) -> String {
          - Pamięć: model zapisuje sobie notatki (np. jak dojść do WhatsAppa) i korzysta z nich następnym \
          razem; globalne dotyczą komputera i użytkownika, notatki sesji jej tematu. Można powiedzieć \
          „zapamiętaj”, „zapomnij” albo „przenieś do globalnych”.\n\
+         - Wyszukiwanie po znaczeniu w notatkach i dawnych rozmowach: „przypomnij sobie, co ustaliliśmy o …” \
+         (narzędzie memory_search).\n\
+         - Eksport rozmów do Markdowna: „wyeksportuj tę rozmowę” (pliki w ~/Documents/Kuterlapa).\n\
          - Większy albo mniejszy tekst: poproś model (narzędzie computer_zoom), w aplikacji na wierzchu \
          albo w okienku Kuterłapy.\n",
     );

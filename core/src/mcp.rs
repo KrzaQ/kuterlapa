@@ -154,6 +154,16 @@ fn memory_schemas() -> Vec<Value> {
         "description": "global: about the computer, apps, websites and the user; session: about this session's topic" });
     vec![
         json!({
+            "name": "memory_search",
+            "description": "Search by meaning in your notes (all sessions and global) and in all past \
+                            conversations with the user, for example \"what did we decide about the backups\". \
+                            Answers with the closest texts, where they come from and a similarity score.",
+            "inputSchema": { "type": "object", "properties": {
+                "query": { "type": "string" },
+                "limit": { "type": "integer", "description": "How many results, default 6" },
+            }, "required": ["query"] },
+        }),
+        json!({
             "name": "memory_read",
             "description": "Read a whole note from your memory by its name (the system prompt lists the notes).",
             "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
@@ -194,6 +204,11 @@ fn memory_call(name: &str, args: &Map<String, Value>, session: &str) -> anyhow::
         memory::Scope::Session => format!("the memory of session {session}"),
     };
     match name {
+        "memory_search" => {
+            let store = crate::store::Store::open()?;
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(6).clamp(1, 20) as usize;
+            crate::search::search(&store, text("query"), limit)
+        }
         "memory_read" => {
             let note = memory::read(session, text("name"))?;
             Ok(format!("{} ({}): {}\n\n{}", note.name, place(note.scope), note.description, note.text))

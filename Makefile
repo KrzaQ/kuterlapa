@@ -21,6 +21,9 @@ DATA_DIR ?= $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/kuterlapa
 SPEECH_BACKEND ?= mlx
 # Extra for the voice provider: empty (say, command) or mlx (local models).
 VOICE_EXTRA ?=
+# Extra for the embedding provider: mlx (a local model) or empty (only an
+# OpenAI-compatible server).
+EMBED_EXTRA ?= mlx
 
 APP := build/Kuterlapa.app
 
@@ -56,21 +59,23 @@ test: ## Run the core's tests and check that the Python providers load
 	cd speech && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
 	cd speech/src && python3 -c "from kuterlapa_speech.text import build_prompt, clean, context_names"
 	cd voice && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
+	cd embed && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
 
 speech: ## Set up the speech provider's environment with SPEECH_BACKEND (default mlx)
 	cd speech && uv sync --extra $(SPEECH_BACKEND)
 
-install: build ## Install the app, the CLI, the providers, the macOS tool pack and example settings
+install: build ## Install the app, the CLI, the providers (speech, voice, embed), the macOS tool pack and example settings
 	mkdir -p $(APP_DIR) $(BIN_DIR)
 	rm -rf $(APP_DIR)/Kuterlapa.app
 	cp -R $(APP) $(APP_DIR)/Kuterlapa.app
 	ln -sf $(APP_DIR)/Kuterlapa.app/Contents/Helpers/kuterlapa $(BIN_DIR)/kuterlapa
 	uv tool install --force --reinstall './speech[$(SPEECH_BACKEND)]'
 	uv tool install --force --reinstall './voice$(if $(VOICE_EXTRA),[$(VOICE_EXTRA)])'
+	uv tool install --force --reinstall './embed$(if $(EMBED_EXTRA),[$(EMBED_EXTRA)])'
 	mkdir -p $(DATA_DIR)/tools
 	cp tools/macos/* $(DATA_DIR)/tools/
 	mkdir -p $(CONFIG_DIR)
-	for f in config.toml mapping.json profiles.json submit.json speech.toml voice.toml dictionary.txt replacements.txt; do \
+	for f in config.toml mapping.json profiles.json submit.json speech.toml voice.toml embed.toml dictionary.txt replacements.txt; do \
 		[ -e $(CONFIG_DIR)/$$f ] || cp config/$$f.example $(CONFIG_DIR)/$$f; \
 	done
 

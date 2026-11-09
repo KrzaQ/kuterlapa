@@ -1,0 +1,13 @@
+# Settings of the embedding provider (kuterlapa-embed), which lets the
+# models search notes and conversations by meaning. Copy to
+# ~/.config/kuterlapa/embed.toml.
+
+# "mlx": a local model on Apple Silicon (make install EMBED_EXTRA=mlx).
+backend = "mlx"
+model = "~/models/Qwen3-Embedding-0.6B"  # Qwen/Qwen3-Embedding-0.6B from Hugging Face
+
+# "openai": any server with the OpenAI embeddings API.
+# backend = "openai"
+# url = "https://api.openai.com/v1"      # or http://localhost:11434/v1 (Ollama)
+# model = "text-embedding-3-small"
+# api_key_env = "OPENAI_API_KEY"         # the environment variable with the key

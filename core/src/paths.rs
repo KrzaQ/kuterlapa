@@ -50,6 +50,11 @@ pub fn voice_socket() -> PathBuf {
     state_dir().join("voice.sock")
 }
 
+/// The embedding provider's socket: vectors for search by meaning.
+pub fn embed_socket() -> PathBuf {
+    state_dir().join("embed.sock")
+}
+
 /// Expands a leading "~/" in a path from a settings file.
 pub fn expand(path: &str) -> PathBuf {
     match path.strip_prefix("~/") {

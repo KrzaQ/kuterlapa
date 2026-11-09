@@ -95,6 +95,17 @@ Reads text aloud. Default: `kuterlapa-voice`, with the backends `say`,
 The provider sends `state speaking on` to the core when it starts to read,
 and `state speaking off` when nothing is left to read.
 
+## Embedding provider: `embed.sock`
+
+Turns text into vectors for search by meaning (the `memory_search` tool).
+Default: `kuterlapa-embed`, with the backends `mlx` (a local model) and
+`openai` (any OpenAI-compatible server), set in `embed.toml`.
+
+| Request | Meaning |
+|---|---|
+| `embed <json>` | `{"kind": "query" \| "document", "texts": [...]}`; answers `{"vectors": [[...], ...]}` on one line, each vector of length 1. |
+| `status` | The backend's name. |
+
 ## Process lifetime
 
 The parent starts the child with a pipe on its standard input and never

@@ -9,6 +9,10 @@
 //!   # The voice provider, which reads text aloud. Empty disables it.
 //!   command = ["~/.local/bin/kuterlapa-voice"]
 //!
+//!   [embed]
+//!   # The embedding provider, for search by meaning. Empty disables it.
+//!   command = ["~/.local/bin/kuterlapa-embed"]
+//!
 //!   [hooks]
 //!   # Programs to run when Kuterlapa starts or stops listening, thinking
 //!   # or speaking (see hooks.rs). Empty: none.
@@ -24,7 +28,21 @@ use std::fs;
 pub struct Config {
     pub speech: Speech,
     pub voice: Voice,
+    pub embed: Embed,
     pub hooks: Hooks,
+}
+
+/// The embedding provider, for search by meaning. Empty disables it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Embed {
+    pub command: Vec<String>,
+}
+
+impl Default for Embed {
+    fn default() -> Self {
+        Embed { command: vec!["~/.local/bin/kuterlapa-embed".into()] }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
