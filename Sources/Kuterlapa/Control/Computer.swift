@@ -171,6 +171,34 @@ enum Computer {
         return click(at: CGPoint(x: frame.midX, y: frame.midY), how: "click")
     }
 
+    /// Puts the keyboard focus in element `number` (a text field, a search
+    /// box): brings its application to the front, focuses the element, and
+    /// clicks it if focusing alone did not work.
+    static func focus(_ number: Int) -> String {
+        guard let element = elements[number] else { return "error: no element \(number); ask for ui first" }
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+        NSRunningApplication(processIdentifier: pid)?.activate()
+        usleep(150_000)
+        let focused = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        if focused != .success, let frame = frame(element) {
+            return click(at: CGPoint(x: frame.midX, y: frame.midY), how: "click")
+        }
+        return "ok"
+    }
+
+    /// Fills element `number` with text: focuses it, selects what is in it,
+    /// and types the text, so the page or app sees real typing.
+    static func fill(_ number: Int, _ text: String) -> String {
+        let focused = focus(number)
+        if focused != "ok" { return focused }
+        usleep(100_000)
+        if let all = KeyCombo("cmd+a") { Keystrokes.press(all) }
+        usleep(50_000)
+        Keystrokes.type(text)
+        return "ok"
+    }
+
     /// Clicks at a point: "click", "double-click" or "right-click".
     static func click(at point: CGPoint, how: String) -> String {
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point,

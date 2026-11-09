@@ -24,6 +24,8 @@ import AppKit
 ///   screen                    screenshot; answers "<path> <width> <height>"
 ///   ui                        elements of the window in front; answers a path
 ///   press <n>                 press element n from the last ui list
+///   focus-element <n>         put the keyboard focus in element n
+///   fill <n> <text>           focus element n, replace its text with text
 ///   click <x> <y> [how]       click, double-click or right-click at a point
 ///   scroll <x> <y> <dx> <dy>  scroll at a point by pixels
 ///   apps                      running applications, "*" in front
@@ -111,6 +113,13 @@ enum ShellCommands {
         case "press":
             guard let number = Int(argument) else { return "error: bad element \(argument)" }
             return Computer.press(number)
+        case "focus-element":
+            guard let number = Int(argument) else { return "error: bad element \(argument)" }
+            return Computer.focus(number)
+        case "fill":
+            let parts = argument.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+            guard let number = parts.first.flatMap({ Int($0) }) else { return "error: usage: fill <n> <text>" }
+            return Computer.fill(number, parts.count > 1 ? String(parts[1]) : "")
         case "click":
             let words = argument.split(separator: " ").map(String.init)
             guard words.count >= 2, let x = Double(words[0]), let y = Double(words[1]) else {

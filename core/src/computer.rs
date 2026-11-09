@@ -18,7 +18,7 @@ use std::time::Duration;
 const SETTLE: Duration = Duration::from_millis(300);
 
 const STEP: &str = r#"{"type": "object", "properties": {
-    "action": {"type": "string", "enum": ["press", "click", "type", "key", "scroll", "activate", "focus_window", "desktop", "wait"]},
+    "action": {"type": "string", "enum": ["press", "focus", "fill", "click", "type", "key", "scroll", "activate", "focus_window", "desktop", "wait"]},
     "element": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"},
     "how": {"type": "string"}, "text": {"type": "string"}, "combo": {"type": "string"},
     "direction": {"type": "string"}, "amount": {"type": "number"}, "name": {"type": "string"},
@@ -58,6 +58,18 @@ const TOOLS: &[(&str, &str, &str)] = &[
         "computer_press",
         "Press an element by its number from the last list.",
         r#"{"element": {"type": "integer", "description": "The number from the list"}}"#,
+    ),
+    (
+        "computer_focus",
+        "Put the keyboard focus in an element from the last list (a text field, a search box, an \
+         editor), bringing its application to the front. Then computer_type writes into it.",
+        r#"{"element": {"type": "integer"}}"#,
+    ),
+    (
+        "computer_fill",
+        "Fill a text field from the last list: focus it, replace what is in it, and type the text. Works \
+         in web pages too. Never fill passwords, card numbers or other secrets.",
+        r#"{"element": {"type": "integer"}, "text": {"type": "string"}}"#,
     ),
     (
         "computer_click",
@@ -162,7 +174,7 @@ pub fn call(name: &str, args: &Map<String, Value>) -> (Vec<Value>, bool) {
             Some(action) => {
                 // Keys and text go to the application in front, which may
                 // not be the one the model thinks: say where they went.
-                let target = matches!(action, "type" | "key")
+                let target = matches!(action, "type" | "key" | "fill")
                     .then(sessions::front_window)
                     .flatten()
                     .map(|(_, app, title)| format!("Went to: {app} — {title}\n"))
@@ -198,6 +210,12 @@ fn act(action: &str, args: &Map<String, Value>) -> Result<(), String> {
     };
     let answer = match action {
         "press" => shell::send(&format!("press {}", number("element").ok_or("element is missing")? as i64)),
+        "focus" => shell::send(&format!("focus-element {}", number("element").ok_or("element is missing")? as i64)),
+        "fill" => shell::send(&format!(
+            "fill {} {}",
+            number("element").ok_or("element is missing")? as i64,
+            text(args, "text").replace('\n', " ")
+        )),
         "click" => {
             let (x, y) = point()?;
             let how = args.get("how").and_then(Value::as_str).unwrap_or("click");
