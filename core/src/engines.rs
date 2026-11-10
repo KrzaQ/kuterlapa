@@ -211,6 +211,13 @@ fn rpc_record(line: &str, input: &mut Option<std::process::ChildStdin>, activity
         return false;
     };
     match record["type"].as_str() {
+        // pi's own figure of how full the context is; then pi may quit.
+        Some("response") if record["command"] == "get_session_stats" => {
+            let usage = &record["data"]["contextUsage"];
+            activity.set_context(usage["tokens"].as_u64(), usage["contextWindow"].as_u64());
+            input.take();
+            true
+        }
         Some("response") if record["success"] == false => {
             activity.error = Some(record["error"].as_str().unwrap_or("pi refused the request").to_string());
             input.take();
@@ -221,9 +228,17 @@ fn rpc_record(line: &str, input: &mut Option<std::process::ChildStdin>, activity
             input.take();
             false
         }
-        // pi will not go on by itself: the request is done.
+        // pi will not go on by itself: the request is done. Ask how full
+        // the context is before letting pi quit.
         Some("agent_settled") => {
-            input.take();
+            match input.as_mut() {
+                Some(stdin) => {
+                    if writeln!(stdin, "{}", json!({ "id": "stats", "type": "get_session_stats" })).is_err() {
+                        input.take();
+                    }
+                }
+                None => {}
+            }
             false
         }
         Some("extension_ui_request") => {

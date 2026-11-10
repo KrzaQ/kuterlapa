@@ -545,7 +545,16 @@ impl Chat {
             "Słucham…".into()
         } else if s.busy {
             match &s.activity {
-                Some(a) => format!("{profile} myśli… {} s · {}", a.started.elapsed().as_secs(), token_line(a)),
+                Some(a) => {
+                    let mut line = format!("{profile} myśli… {} s · {}", a.started.elapsed().as_secs(), token_line(a));
+                    if let Some(context) = context_line(a) {
+                        line.push_str(&format!(" · {context}"));
+                    }
+                    if let Some(limits) = limits_line(a) {
+                        line.push_str(&format!("\n{limits}"));
+                    }
+                    line
+                }
                 None => format!("{profile} myśli…"),
             }
         } else if let Some(e) = &s.error {
@@ -589,11 +598,16 @@ impl Chat {
                 state["activity"] = activity_lines(a);
             } else if s.error.is_none() && !s.answer.is_empty() {
                 let mut parts = vec![token_line(a)];
+                parts.extend(context_line(a));
                 if !a.steps.is_empty() {
                     parts.push(tool_count(a.steps.len()));
                 }
                 parts.push(format!("{} s", a.finished.unwrap_or_else(|| a.started.elapsed()).as_secs()));
-                state["detail"] = json!(parts.join(" · "));
+                let mut detail = parts.join(" · ");
+                if let Some(limits) = limits_line(a) {
+                    detail.push_str(&format!("\n{limits}"));
+                }
+                state["detail"] = json!(detail);
             }
         }
         if let Some((ends, total)) = s.countdown {
@@ -706,6 +720,44 @@ fn activity_lines(a: &Activity) -> serde_json::Value {
         lines.push(json!({ "kind": "thinking", "text": thinking }));
     }
     json!(lines)
+}
+
+/// How full the context window is: "kontekst 28,1k/1M (3%)".
+fn context_line(a: &Activity) -> Option<String> {
+    if a.context == 0 {
+        return None;
+    }
+    Some(match a.window.filter(|&w| w > 0) {
+        Some(window) => format!(
+            "kontekst {}/{} ({}%)",
+            activity::tokens(a.context),
+            activity::tokens(window),
+            (a.context * 100 + window / 2) / window
+        ),
+        None => format!("kontekst {}", activity::tokens(a.context)),
+    })
+}
+
+/// Claude's plan limits, as in the Claude Code status line: "🟢 5h 14%
+/// (1h20m) · 🟡 7d 36% (93%)". The five hours show the time to the reset,
+/// the week the pace (the usage at the reset if it goes on like this); the
+/// color is the pace: red from 100%, yellow from 90%.
+fn limits_line(a: &Activity) -> Option<String> {
+    if a.limits.is_empty() {
+        return None;
+    }
+    let now = activity::now();
+    let parts: Vec<String> = a
+        .limits
+        .iter()
+        .map(|l| {
+            let pace = l.pace(now);
+            let dot = if pace >= 100 { "🔴" } else if pace >= 90 { "🟡" } else { "🟢" };
+            let extra = if l.name == "5h" { l.left(now) } else { format!("{pace}%") };
+            format!("{dot} {} {}% ({extra})", l.name, (l.used * 100.0).round())
+        })
+        .collect();
+    Some(parts.join(" · "))
 }
 
 fn token_line(a: &Activity) -> String {

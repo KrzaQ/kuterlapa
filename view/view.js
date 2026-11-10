@@ -17,7 +17,9 @@
 //   input: 15500, output: 254,   // tokens read (all calls) and written
 //   seconds: 7.2,
 //   steps: [{ name, detail, state: "running" | "done" | "failed", result }],
-//   thinking: "...",             // only while it works
+//   context: 28100, window: 1000000,  // how full the context window is
+//   limits: [{ name: "5h", used: 0.14, left: "1h20m", pace: 28 }],  // Claude's plan
+//   thinking: "...",
 //   profile: "Qwen 96k"          // only while it works
 // }
 //
@@ -76,7 +78,7 @@ function tokens(n) {
   if (n < 1000) return String(n);
   if (n < 100000) return (n / 1000).toFixed(1).replace(".", ",") + "k";
   if (n < 1000000) return Math.floor(n / 1000) + "k";
-  return (n / 1000000).toFixed(1).replace(".", ",") + "M";
+  return (n / 1000000).toFixed(1).replace(".0", "").replace(".", ",") + "M";
 }
 
 // "1 wywołanie", "3 wywołania", "5 wywołań"
@@ -93,9 +95,22 @@ function workHtml(w, live) {
   const input = live && !w.input ? "…" : tokens(w.input || 0);
   const parts = [`<span class="tokens">${input}</span> wej.`,
     `<span class="tokens">${tokens(w.output || 0)}</span> wyj.`];
+  if (w.context) {
+    const share = w.window ? ` (${Math.round((w.context * 100) / w.window)}%)` : "";
+    parts.push(`kontekst <span class="tokens">${tokens(w.context)}${w.window ? "/" + tokens(w.window) : ""}</span>${share}`);
+  }
   if (steps.length) parts.push(`🔧 ${calls(steps.length)}` + (failed ? ` <span class="failed">(${failed} ✗)</span>` : ""));
   parts.push(live ? '<span class="seconds"></span>' : `${Math.round(w.seconds || 0)} s`);
   let html = `<div class="summary">${parts.join(" · ")}</div>`;
+  // Claude's plan limits, as in the Claude Code status line.
+  if ((w.limits || []).length) {
+    const limit = (l) => {
+      const tone = l.pace >= 100 ? "over" : l.pace >= 90 ? "near" : "fine";
+      const extra = l.name === "5h" ? l.left : `${l.pace}%`;
+      return `<span class="limit ${tone}">${escapeHtml(l.name)} ${Math.round(l.used * 100)}% (${escapeHtml(extra)})</span>`;
+    };
+    html += `<div class="summary">${w.limits.map(limit).join(" · ")}</div>`;
+  }
   if (steps.length) {
     html += '<ul class="steps">' + steps.map((s) => {
       const mark = { done: "✓", failed: "✗" }[s.state] || "⋯";

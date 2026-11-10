@@ -60,6 +60,40 @@ pub struct Call {
     pub ms: Option<u64>,
 }
 
+/// One window of a plan's usage limit, as Claude reports it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Limit {
+    /// "5h" or "7d".
+    pub name: &'static str,
+    /// Used, from 0 to 1.
+    pub used: f64,
+    /// When the window starts again (Unix time).
+    pub resets_at: i64,
+}
+
+impl Limit {
+    fn seconds(&self) -> i64 {
+        if self.name == "5h" { 5 * 3600 } else { 7 * 24 * 3600 }
+    }
+
+    /// Where the usage lands at the reset if it goes on at this pace, in
+    /// percent (like the Claude Code status line). At most 999.
+    pub fn pace(&self, now: i64) -> u64 {
+        let elapsed = (now - (self.resets_at - self.seconds())).clamp(1, self.seconds());
+        ((self.used * 100.0 * self.seconds() as f64 / elapsed as f64).round() as u64).min(999)
+    }
+
+    /// "1h20m", "12m", "3d4h": the time until the reset.
+    pub fn left(&self, now: i64) -> String {
+        let s = (self.resets_at - now).max(0);
+        match s {
+            0..=3599 => format!("{}m", s / 60),
+            3600..=86_399 => format!("{}h{}m", s / 3600, s % 3600 / 60),
+            _ => format!("{}d{}h", s / 86_400, s % 86_400 / 3600),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Activity {
     pub started: Instant,
@@ -79,6 +113,14 @@ pub struct Activity {
     output_chars: usize,
     /// Each model's use, for the statistics.
     pub calls: Vec<Call>,
+    /// How full the model's context window is: the tokens of its latest
+    /// call (all it read, cached or not, and what it wrote). It differs
+    /// from `input`, which adds up every call.
+    pub context: u64,
+    /// The size of that window, once the engine tells it.
+    pub window: Option<u64>,
+    /// Claude's plan limits: the five-hour and the seven-day window.
+    pub limits: Vec<Limit>,
     /// The final answer and the error, when the engine has finished.
     pub answer: Option<String>,
     pub error: Option<String>,
@@ -95,6 +137,9 @@ impl Default for Activity {
             output_done: 0,
             output_chars: 0,
             calls: Vec::new(),
+            context: 0,
+            window: None,
+            limits: Vec::new(),
             answer: None,
             error: None,
         }
@@ -150,6 +195,16 @@ impl Activity {
         }
     }
 
+    /// pi's own figure (`get_session_stats`), which it uses for compaction.
+    pub fn set_context(&mut self, tokens: Option<u64>, window: Option<u64>) {
+        if let Some(tokens) = tokens {
+            self.context = tokens;
+        }
+        if window.is_some() {
+            self.window = window;
+        }
+    }
+
     /// The work for the chat view, live and saved with the answer. The
     /// latest thinking goes with it: it shows later why the model did
     /// something.
@@ -171,7 +226,17 @@ impl Activity {
             "output": self.output(),
             "seconds": self.finished.unwrap_or_else(|| self.started.elapsed()).as_secs_f64(),
             "steps": steps,
+            "context": self.context,
+            "window": self.window,
         });
+        if !self.limits.is_empty() {
+            let now = now();
+            value["limits"] = json!(self
+                .limits
+                .iter()
+                .map(|l| json!({ "name": l.name, "used": l.used, "left": l.left(now), "pace": l.pace(now) }))
+                .collect::<Vec<_>>());
+        }
         if !self.thinking.trim().is_empty() {
             value["thinking"] = json!(self.thinking.trim());
         }
@@ -186,7 +251,9 @@ impl Activity {
                 let event = &e["event"];
                 match event["type"].as_str() {
                     Some("message_start") => {
-                        self.input += context(&event["message"]["usage"]);
+                        let read = context(&event["message"]["usage"]);
+                        self.input += read;
+                        self.context = read;
                         self.output_chars = 0;
                         true
                     }
@@ -223,12 +290,29 @@ impl Activity {
                         }
                     }
                     Some("message_delta") => {
-                        self.output_done += event["usage"]["output_tokens"].as_u64().unwrap_or(0);
+                        let written = event["usage"]["output_tokens"].as_u64().unwrap_or(0);
+                        self.output_done += written;
+                        self.context += written;
                         self.output_chars = 0;
                         true
                     }
                     _ => false,
                 }
+            }
+            // The plan's usage limits.
+            Some("rate_limit_event") => {
+                let windows = &e["rate_limit_info"]["unifiedWindows"];
+                let limits: Vec<Limit> = [("5h", "five_hour"), ("7d", "seven_day")]
+                    .iter()
+                    .filter_map(|(name, key)| {
+                        let w = &windows[*key];
+                        Some(Limit { name, used: w["utilization"].as_f64()?, resets_at: w["resetsAt"].as_i64()? })
+                    })
+                    .collect();
+                if !limits.is_empty() {
+                    self.limits = limits;
+                }
+                true
             }
             // The whole message: the tool calls with their arguments.
             Some("assistant") => {
@@ -257,6 +341,17 @@ impl Activity {
                 changed
             }
             Some("result") => {
+                // The window of the model that did most of the reading: the
+                // profile's own, not one Claude Code used on the side.
+                self.window = e["modelUsage"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .max_by_key(|(_, u)| {
+                        number(&u["inputTokens"]) + number(&u["cacheReadInputTokens"]) + number(&u["cacheCreationInputTokens"])
+                    })
+                    .and_then(|(_, u)| u["contextWindow"].as_u64())
+                    .or(self.window);
                 for (model, u) in e["modelUsage"].as_object().into_iter().flatten() {
                     self.calls.push(Call {
                         role: "model",
@@ -333,8 +428,12 @@ impl Activity {
                 let message = &e["message"];
                 let usage = &message["usage"];
                 self.calls.push(pi_call("model", &message["provider"], &message["model"], usage, &message["durationMs"]));
-                self.input += ["input", "cacheRead", "cacheWrite"].iter().map(|k| usage[k].as_u64().unwrap_or(0)).sum::<u64>();
+                let read = ["input", "cacheRead", "cacheWrite"].iter().map(|k| usage[k].as_u64().unwrap_or(0)).sum::<u64>();
+                self.input += read;
                 self.output_done += usage["output"].as_u64().unwrap_or(0);
+                if read > 0 {
+                    self.context = read + usage["output"].as_u64().unwrap_or(0);
+                }
                 self.output_chars = 0;
                 // pi tries again after some errors; the last message counts.
                 if message["stopReason"] == "error" || message["stopReason"] == "aborted" {
@@ -357,6 +456,10 @@ impl Activity {
             _ => false,
         }
     }
+}
+
+pub fn now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 fn str(v: &Value) -> &str {
@@ -451,7 +554,7 @@ pub fn tokens(n: u64) -> String {
         0..=999 => n.to_string(),
         1_000..=99_999 => format!("{:.1}k", n as f64 / 1000.0).replace('.', ","),
         100_000..=999_999 => format!("{}k", n / 1000),
-        _ => format!("{:.1}M", n as f64 / 1_000_000.0).replace('.', ","),
+        _ => format!("{:.1}M", n as f64 / 1_000_000.0).replace(".0M", "M").replace('.', ","),
     }
 }
 
@@ -471,7 +574,7 @@ mod tests {
             r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"Window 1\n  Inbox"}]}]}}"#,
             r#"{"type":"stream_event","event":{"type":"message_start","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":6947}}}}"#,
             r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"12345678"}}}"#,
-            r#"{"type":"result","is_error":false,"result":" 7 tabs. ","modelUsage":{"claude-opus-5-5":{"inputTokens":4,"outputTokens":96,"cacheReadInputTokens":6947,"cacheCreationInputTokens":7049,"cacheCreationEphemeral1hInputTokens":7049,"thinkingTokens":20,"webSearchRequests":0,"costUSD":0.08}}}"#,
+            r#"{"type":"result","is_error":false,"result":" 7 tabs. ","modelUsage":{"claude-opus-5-5":{"inputTokens":4,"outputTokens":96,"cacheReadInputTokens":6947,"cacheCreationInputTokens":7049,"cacheCreationEphemeral1hInputTokens":7049,"thinkingTokens":20,"webSearchRequests":0,"costUSD":0.08,"contextWindow":1000000}}}"#,
         ];
         let mut a = Activity::default();
         for line in lines {
@@ -486,6 +589,8 @@ mod tests {
         assert_eq!(a.input, 6949 + 7049);
         assert_eq!(a.output(), 82 + 2);
         assert_eq!(a.answer.as_deref(), Some("7 tabs."));
+        // The latest call: 2 new, 100 written to the cache, 6947 read from it.
+        assert_eq!(a.context, 7049);
         assert_eq!(
             a.calls,
             vec![Call {
@@ -531,6 +636,19 @@ mod tests {
         let roles: Vec<_> = a.calls.iter().map(|c| (c.role, c.model.as_str(), c.input, c.ms)).collect();
         assert_eq!(roles, vec![("model", "", 0, None), ("classifier", "qwen", 456, Some(2646)), ("model", "", 519, None)]);
         assert_eq!(a.calls[1].thinking, None);
+        assert_eq!(a.context, 519 + 42);
+    }
+
+    #[test]
+    fn limits_and_pace() {
+        let mut a = Activity::default();
+        a.line("claude", r#"{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"five_hour":{"utilization":0.14,"resetsAt":20000},"seven_day":{"utilization":0.36,"resetsAt":604800}}}}"#);
+        assert_eq!(a.limits.len(), 2);
+        // Half of the five hours gone, 14% used: 28% at the reset.
+        let five = &a.limits[0];
+        assert_eq!(five.pace(20000 - 9000), 28);
+        assert_eq!(five.left(20000 - 4800), "1h20m");
+        assert_eq!(a.limits[1].left(0), "7d0h");
     }
 
     #[test]
@@ -538,6 +656,8 @@ mod tests {
         assert_eq!(tokens(537), "537");
         assert_eq!(tokens(19_810), "19,8k");
         assert_eq!(tokens(250_000), "250k");
+        assert_eq!(tokens(1_000_000), "1M");
+        assert_eq!(tokens(1_200_000), "1,2M");
         assert_eq!(arguments(&serde_json::json!({"a": 1, "b": "x  y"})), "a: 1, b: x y");
         assert_eq!(tail("one two three four", 9), "four");
     }

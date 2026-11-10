@@ -129,6 +129,9 @@ header #where { margin: 0.2em 0 0; }
 .work { margin-top: 0.5em; font-size: 0.72em; color: var(--muted); }
 .work .summary .tokens { color: var(--text); font-variant-numeric: tabular-nums; }
 .work .failed { color: #e5534b; }
+.work .limit.fine { color: #57ab5a; }
+.work .limit.near { color: #c69026; }
+.work .limit.over { color: #e5534b; }
 .work .steps { list-style: none; margin: 0.35em 0 0; padding: 0; }
 .work .steps li {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
