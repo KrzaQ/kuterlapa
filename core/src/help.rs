@@ -180,6 +180,7 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::Help => (Model, "ta pomoc", "pokaż albo schowaj tę pomoc".into()),
         Action::Sessions => (Model, "ostatnie sesje", "pokaż albo schowaj ostatnio używane sesje".into()),
         Action::Usage => (Model, "zużycie tokenów", "pokaż albo schowaj dzisiejsze zużycie modeli".into()),
+        Action::ClaudeAsk => (Model, "pytanie Claude Code", "odpowiedz na pytanie Claude Code z bieżącej karty iTerma".into()),
         Action::View => (
             Model,
             "widok czatu",

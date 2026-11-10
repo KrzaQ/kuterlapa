@@ -202,6 +202,11 @@ fn handle(state: &Arc<State>, line: &str) -> String {
             }
             other => format!("error: no panel {other}"),
         },
+        // A tool's short note in the overlay.
+        "note" => {
+            state.chat.note(argument);
+            "ok".into()
+        }
         "speech" => speech::send(argument),
         "say" => voice::send(&format!("say {argument}")),
         "voice" => voice::send(argument),
@@ -273,6 +278,20 @@ fn act(state: &Arc<State>, button: &str) -> String {
         Action::Sessions => {
             if !hide_help(state) {
                 show_panel(state, &sessions::panel());
+            }
+            "ok".into()
+        }
+        Action::ClaudeAsk => {
+            // The tool shows the questions itself; it may wait long for
+            // the user, so it runs on its own.
+            let script = paths::data_dir().join("tools").join("tmux.py");
+            match Command::new("python3").arg(script).arg("ask-front").stdin(Stdio::null()).spawn() {
+                Ok(mut child) => {
+                    thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                }
+                Err(e) => eprintln!("claude-ask: {e}"),
             }
             "ok".into()
         }

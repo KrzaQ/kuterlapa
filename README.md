@@ -109,6 +109,8 @@ All in `~/.config/kuterlapa/`:
   the stick for a mouse. An action is `"dictate"`, `"draft"`,
   `"chat"`, `"command"`, `"voice-toggle"`, `"recall"`, `"next-profile"`,
   `"help"`, `"sessions"`, `"view"`, `"usage"` (today's token statistics),
+  `"claude-ask"` (answer the question of the Claude Code in iTerm's front
+  tab, in the overlay, without a model),
   `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation, or press Escape),

@@ -15,6 +15,9 @@
     tmux.py ask <host> <pane>             show Claude Code's questions in
                                           Kuterlapa's overlay, one by one;
                                           the user picks with the controller
+    tmux.py ask-front                     the same for the Claude Code in
+                                          iTerm's front tab (a controller
+                                          button, without a model)
 
 Claude Code (2.1) draws its questions like this: numbered options, a
 number key picks one (or ticks it, when several may be picked), the
@@ -296,6 +299,70 @@ def ask(host: str, pane: str) -> str:
     return "\n".join(done) if done else "No question waits in this pane."
 
 
+FRONT = """const it = Application("iTerm2");
+const s = it.currentWindow().currentSession();
+const v = (n) => { try { return s.variable({ named: n }) || ""; } catch (e) { return ""; } };
+JSON.stringify({ name: s.name(), tty: s.tty(), commandLine: v("commandLine"), autoName: v("autoName") });"""
+
+# ssh options that take a value: the host comes after them.
+SSH_VALUES = set("bcDEeFIiJLlmOopQRSWw")
+
+
+def front() -> tuple[str, str]:
+    """The host and tmux pane behind iTerm's front tab: the host from the
+    tab's "ssh <host>", the pane from the tmux client of that tab (its tty
+    here; on a host, the session named in the tab's title, or else the
+    client used last)."""
+    done = subprocess.run(["osascript", "-l", "JavaScript", "-e", FRONT], capture_output=True, text=True, timeout=10)
+    if done.returncode != 0:
+        raise Fail("iTerm has no window in front.")
+    info = json.loads(done.stdout)
+    words = (info.get("commandLine") or "").split()
+    host = "local"
+    if words and words[0] == "ssh":
+        rest = iter(words[1:])
+        for word in rest:
+            if word.startswith("-"):
+                if len(word) == 2 and word[1] in SSH_VALUES:
+                    next(rest, None)
+                continue
+            host = word
+            break
+    sep = " |~| "
+    listing = tmux(host, "list-clients", "-F", sep.join([
+        "#{client_tty}", "#{session_name}:#{window_index}.#{pane_index}", "#{session_name}", "#{client_activity}"]))
+    clients = [line.split(sep) for line in listing.splitlines() if line.count(sep) == 3]
+    if not clients:
+        raise Fail(f"No tmux client{' on ' + host if host != 'local' else ''} for iTerm's front tab.")
+    if host == "local":
+        mine = [c for c in clients if c[0] == info.get("tty")]
+    else:
+        title = (info.get("autoName") or info.get("name") or "").replace(" (ssh)", "").strip()
+        mine = [c for c in clients if c[2] == title]
+    chosen = max(mine or clients, key=lambda c: int(c[3] or 0))
+    return host, chosen[1]
+
+
+def note(text: str):
+    """A short note in Kuterlapa's overlay."""
+    try:
+        kuterlapa(f"note {text}", 5)
+    except OSError:
+        pass
+
+
+def ask_front() -> str:
+    host, pane = front()
+    where = pane if host == "local" else f"{pane} na {host}"
+    if not question(screen(host, pane)):
+        note(f"Claude Code w {where} na nic nie czeka.")
+        return f"No question waits in {where}."
+    result = ask(host, pane)
+    if result.startswith("The user cancelled"):
+        note("Anulowane: pytanie dalej czeka w Claude Code.")
+    return result
+
+
 def send(host: str, pane: str, text: str) -> str:
     tmux(host, "send-keys", "-t", pane, "-l", "--", text)
     time.sleep(0.2)
@@ -318,12 +385,16 @@ def main(argv: list[str]) -> int:
             print(answer(argv[1], argv[2], argv[3]))
         elif len(argv) >= 3 and argv[0] == "ask":
             print(ask(argv[1], argv[2]))
+        elif argv and argv[0] == "ask-front":
+            print(ask_front())
         else:
             print(__doc__.strip())
             return 2
         return 0
     except (Fail, subprocess.TimeoutExpired, OSError) as e:
         print(f"error: {e}")
+        if argv and argv[0] == "ask-front":
+            note(f"Pytanie z iTerma: {e}")
         return 1
 
 

@@ -458,6 +458,11 @@ impl Chat {
         self.flash(&format!("Profil: {name}"));
     }
 
+    /// A note for a few seconds, from a tool ("note <text>" on core.sock).
+    pub fn note(self: &Arc<Self>, text: &str) {
+        self.flash_for(text, Duration::from_secs(4));
+    }
+
     /// A note for two seconds, above the answer if one is shown.
     fn flash(self: &Arc<Self>, note: &str) {
         self.flash_for(note, Duration::from_secs(2));

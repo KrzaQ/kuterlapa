@@ -59,6 +59,9 @@ pub enum Action {
     Sessions,
     /// Show today's token statistics, or hide them.
     Usage,
+    /// Answer the question of the Claude Code in iTerm's front tab, in the
+    /// overlay, without a model.
+    ClaudeAsk,
     /// Open the large chat view, or close it.
     View,
 }
@@ -76,6 +79,7 @@ impl Action {
             "help" => return Some(Action::Help),
             "sessions" => return Some(Action::Sessions),
             "usage" => return Some(Action::Usage),
+            "claude-ask" => return Some(Action::ClaudeAsk),
             "view" => return Some(Action::View),
             _ => {}
         }
