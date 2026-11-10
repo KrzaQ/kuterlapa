@@ -190,13 +190,38 @@ enum Computer {
     /// Fills element `number` with text: focuses it, selects what is in it,
     /// and types the text, so the page or app sees real typing.
     static func fill(_ number: Int, _ text: String) -> String {
+        guard let element = elements[number] else { return "error: no element \(number); ask for ui first" }
+        let role: String? = attribute(element, kAXRoleAttribute)
+        let subrole: String? = attribute(element, kAXSubroleAttribute)
+        // The text of a password field cannot be read back.
+        let secure = role == "AXSecureTextField" || subrole == (kAXSecureTextFieldSubrole as String)
+        // First the value itself, through accessibility: it works where an
+        // app ignores typed keys, and needs no keyboard focus.
+        var settable = DarwinBoolean(false)
+        if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
+           settable.boolValue,
+           AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString) == .success {
+            usleep(100_000)
+            if secure || value(element) == text { return "ok" }
+        }
+        // Then the keyboard: focus, select all, type.
         let focused = focus(number)
         if focused != "ok" { return focused }
         usleep(100_000)
         if let all = KeyCombo("cmd+a") { Keystrokes.press(all) }
         usleep(50_000)
         Keystrokes.type(text)
-        return "ok"
+        usleep(200_000)
+        if secure { return "ok: typed into a password field, which cannot be read back" }
+        guard let shown = value(element) else { return "ok: typed, but the field's text cannot be read back; check it" }
+        if shown == text { return "ok" }
+        let short = shown.count > 80 ? String(shown.prefix(80)) + "…" : shown
+        return "error: the field still shows \"\(short)\"; the application did not take the text"
+    }
+
+    /// A field's text, if the application tells it.
+    private static func value(_ element: AXUIElement) -> String? {
+        attribute(element, kAXValueAttribute)
     }
 
     /// Clicks at a point: "click", "double-click" or "right-click".

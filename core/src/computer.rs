@@ -67,8 +67,10 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ),
     (
         "computer_fill",
-        "Fill a text field from the last list: focus it, replace what is in it, and type the text. Works \
-         in web pages too. Never fill passwords, card numbers or other secrets.",
+        "Fill a text field from the last list: set its text through accessibility, or else focus it, \
+         replace what is in it and type. It then reads the field back and fails if the text is not \
+         there. Works in web pages too. Element numbers change after each action: use the new list. \
+         Never fill passwords, card numbers or other secrets.",
         r#"{"element": {"type": "integer"}, "text": {"type": "string"}}"#,
     ),
     (
@@ -179,7 +181,7 @@ pub fn call(name: &str, args: &Map<String, Value>) -> (Vec<Value>, bool) {
                     .flatten()
                     .map(|(_, app, title)| format!("Went to: {app} — {title}\n"))
                     .unwrap_or_default();
-                act(action, args).and_then(|_| after()).map(|list| format!("{target}{list}"))
+                act(action, args).and_then(|note| after().map(|list| format!("{target}{note}{list}")))
             }
             None => Err(format!("no tool {other}")),
         },
@@ -202,7 +204,9 @@ fn run_steps(args: &Map<String, Value>) -> Result<String, String> {
 }
 
 /// One action, without the list after it.
-fn act(action: &str, args: &Map<String, Value>) -> Result<(), String> {
+/// Runs one action. Returns a note for the model when the action worked
+/// with a caveat (empty otherwise).
+fn act(action: &str, args: &Map<String, Value>) -> Result<String, String> {
     let number = |key: &str| args.get(key).and_then(Value::as_f64);
     let point = || match (number("x"), number("y")) {
         (Some(x), Some(y)) => Ok((x, y)),
@@ -250,9 +254,10 @@ fn act(action: &str, args: &Map<String, Value>) -> Result<(), String> {
         }
         other => return Err(format!("unknown action {other:?}")),
     };
+    // "ok", or "ok: <a note the model should read>".
     match answer.strip_prefix("error: ") {
         Some(e) => Err(e.to_string()),
-        None => Ok(()),
+        None => Ok(answer.strip_prefix("ok: ").map(|note| format!("Note: {note}\n")).unwrap_or_default()),
     }
 }
 
