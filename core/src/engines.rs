@@ -184,11 +184,13 @@ fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Opt
     c.args(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     c.args(["--thinking-display", "summarized"]);
     match tools.and_then(|session| mcp_config(session, profile.local)) {
-        // Claude Code's own tools stay off (no shell, no files) except web
-        // search. Its permission classifier ("auto") judges each tool call;
-        // tools that must ask the user do it in `kuterlapa mcp`.
+        // Claude Code's own tools stay off (no files) except web search, and
+        // its shell when the profile allows it. Its permission classifier
+        // ("auto") judges each tool call; tools that must ask the user do it
+        // in `kuterlapa mcp`.
         Some(config) => {
-            c.args(["--tools", "WebSearch,WebFetch", "--mcp-config", &config, "--strict-mcp-config"]);
+            let builtin = if profile.shell { "WebSearch,WebFetch,Bash" } else { "WebSearch,WebFetch" };
+            c.args(["--tools", builtin, "--mcp-config", &config, "--strict-mcp-config"]);
             c.args(["--permission-mode", "auto"]);
         }
         None => {
@@ -323,13 +325,16 @@ fn pi(profile: &Profile, system: &str, project: bool, tools: Option<&str>) -> Co
     c.args(["--mode", "rpc", "--no-session", "--model", &profile.model]);
     let extension = tools.and_then(|_| pi_extension());
     match (tools, extension, std::env::current_exe()) {
-        // Only the Kuterlapa tools: no shell, no files. The extension
+        // Only the Kuterlapa tools, and the shell when the profile allows
+        // it; no file tools. The extension
         // registers the server for this run only; pi's own settings stay as
         // they are, so its extensions (for example a permission classifier)
         // still judge each call.
         (Some(session), Some(extension), Ok(me)) => {
             c.arg("-e").arg(extension);
-            c.args(["--tools", "mcp__kuterlapa__*"]);
+            // pi's own bash when the profile allows a shell: pi-censor
+            // judges each command with its rules for shells.
+            c.args(["--tools", if profile.shell { "bash,mcp__kuterlapa__*" } else { "mcp__kuterlapa__*" }]);
             c.env("KUTERLAPA_EXE", me).env("KUTERLAPA_SESSION", session);
             if profile.local {
                 c.env("KUTERLAPA_LOCAL", "1");

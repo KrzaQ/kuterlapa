@@ -631,7 +631,10 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          Nigdy nie pisz w odpowiedzi „A — …, B — …”: przyciski nie odpowiadają na \
          tekst. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. \
          Nie otwieraj narzędzi deweloperskich przeglądarki i nie wpisuj kodu do konsoli strony: do stron \
-         służą narzędzia chrome_*. Gdy coś nie działa, powiedz to użytkownikowi zamiast obchodzić. Gdy nie masz \
+         służą narzędzia chrome_*. Gdy coś nie działa, powiedz to użytkownikowi zamiast obchodzić. \
+         Gdy masz powłokę (bash), używaj jej do pracy w tle: sprawdzić coś, policzyć, przeczytać plik. \
+         iTerma (iterm_*) używaj do tego, co użytkownik ma widzieć: sesje SSH i tmux, długie polecenia \
+         do śledzenia. Hasła nigdy nie wpisuj w poleceniach. Gdy nie masz \
          narzędzia do prośby, powiedz to wprost.",
     );
     // Read: the answer is read as written, so the prompt does not change.

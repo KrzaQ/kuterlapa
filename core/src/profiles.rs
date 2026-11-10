@@ -24,10 +24,19 @@ pub struct Profile {
     /// hosted models.
     #[serde(default)]
     pub local: bool,
+    /// The model may run shell commands with the engine's own tool (Claude
+    /// Code's Bash, pi's bash), which the engine's permission classifier
+    /// judges. On unless the profile says "shell": false.
+    #[serde(default = "on")]
+    pub shell: bool,
+}
+
+fn on() -> bool {
+    true
 }
 
 fn default_profiles() -> Vec<Profile> {
-    vec![Profile { name: "Claude".into(), engine: "claude".into(), model: "sonnet".into(), effort: None, local: false }]
+    vec![Profile { name: "Claude".into(), engine: "claude".into(), model: "sonnet".into(), effort: None, local: false, shell: true }]
 }
 
 pub fn load() -> Vec<Profile> {

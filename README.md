@@ -89,6 +89,9 @@ All in `~/.config/kuterlapa/`:
   switch between. `"local": true` marks a model that runs on your own
   machines. Only such profiles get the tools marked `private = true`.
   The engine does not decide it: `pi` can also reach hosted models.
+  `"shell": false` takes the shell away from a profile's model; by default
+  it may run commands with its engine's own tool (Claude Code's `Bash`,
+  pi's `bash`), which the engine's permission classifier judges.
 - `tools/*.toml`: your own tools for the models. A session's own tools are
   in its `tools/` folder.
 - `sessions/<name>/`: a session's `context.md` (what the model should
