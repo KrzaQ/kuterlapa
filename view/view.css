@@ -147,7 +147,13 @@ header #where { margin: 0.2em 0 0; }
 .work .steps .running .mark { color: var(--accent); }
 .work .steps .name { color: var(--text); font-weight: 600; }
 .work .steps .result { opacity: 0.75; }
-.work.done { border-top: 1px solid var(--line); padding-top: 0.4em; opacity: 0.8; }
+.work.done { margin: 0 0 0.5em; opacity: 0.8; }
+.work.done summary { cursor: pointer; list-style: none; }
+.work.done summary::-webkit-details-marker { display: none; }
+.work.done summary .summary:first-child::before { content: "▸ "; color: var(--accent); }
+.work.done[open] summary .summary:first-child::before { content: "▾ "; }
+.work.done[open] { border-left: 2px solid var(--line); padding-left: 0.7em; }
+.work.done .thinking { margin-top: 0.5em; font-style: italic; white-space: pre-wrap; }
 
 .message.working .meta { color: var(--accent); }
 .message.working .work {

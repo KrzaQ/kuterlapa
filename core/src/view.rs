@@ -205,7 +205,7 @@ fn send(view: &View, follow: bool) {
         .into_iter()
         .map(|m| {
             let work = m.work.as_deref().and_then(|w| serde_json::from_str::<serde_json::Value>(w).ok());
-            json!({ "role": m.role, "text": m.text, "profile": m.profile, "created": m.created, "work": work })
+            json!({ "id": m.id, "role": m.role, "text": m.text, "profile": m.profile, "created": m.created, "work": work })
         })
         .collect();
     let current = sessions::current_name();

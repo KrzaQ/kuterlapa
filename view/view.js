@@ -62,13 +62,23 @@ function renderMarkdown(text) {
   return html;
 }
 
+// The answers whose work the user unfolded, so a redraw keeps them open.
+const unfolded = new Set();
+
 function message(m) {
   const div = document.createElement("div");
   div.className = `message ${m.role}`;
   const who = m.role === "user" ? "Ty" : m.profile || "Model";
+  // What the model did comes before its answer, folded: the summary line
+  // shows, the tool calls and the thinking open with a click.
+  const work = m.work
+    ? `<details class="work done"${unfolded.has(m.id) ? " open" : ""}><summary>${summaryHtml(m.work)}</summary>` +
+      stepsHtml(m.work) + thinkingHtml(m.work) + "</details>"
+    : "";
   div.innerHTML = `<div class="meta">${escapeHtml(who)} · ${escapeHtml(m.created || "")}</div>` +
-    `<div class="body">${renderMarkdown(m.text || "")}</div>` +
-    (m.work ? `<div class="work done">${workHtml(m.work)}</div>` : "");
+    work + `<div class="body">${renderMarkdown(m.text || "")}</div>`;
+  const details = div.querySelector("details");
+  if (details) details.addEventListener("toggle", () => details.open ? unfolded.add(m.id) : unfolded.delete(m.id));
   div.querySelectorAll("pre code").forEach((block) => hljs.highlightElement(block));
   return div;
 }
@@ -88,7 +98,12 @@ function calls(n) {
   return `${n} ${word}`;
 }
 
+// While the model works: everything, open.
 function workHtml(w, live) {
+  return summaryHtml(w, live) + stepsHtml(w) + (live ? thinkingHtml(w) : "");
+}
+
+function summaryHtml(w, live) {
   const steps = w.steps || [];
   const failed = steps.filter((s) => s.state === "failed").length;
   // Some engines count the tokens read only at the end of a call.
@@ -111,6 +126,12 @@ function workHtml(w, live) {
     };
     html += `<div class="summary">${w.limits.map(limit).join(" · ")}</div>`;
   }
+  return html;
+}
+
+function stepsHtml(w) {
+  const steps = w.steps || [];
+  let html = "";
   if (steps.length) {
     html += '<ul class="steps">' + steps.map((s) => {
       const mark = { done: "✓", failed: "✗" }[s.state] || "⋯";
@@ -120,10 +141,11 @@ function workHtml(w, live) {
         (s.result ? ` <span class="result">→ ${escapeHtml(s.result)}</span>` : "") + "</li>";
     }).join("") + "</ul>";
   }
-  if (live && w.thinking) {
-    html += `<div class="thinking"><div>💭 ${escapeHtml(w.thinking)}</div></div>`;
-  }
   return html;
+}
+
+function thinkingHtml(w) {
+  return w.thinking ? `<div class="thinking"><div>💭 ${escapeHtml(w.thinking)}</div></div>` : "";
 }
 
 // The answer that is coming: the model's work, live.
@@ -216,9 +238,16 @@ function render(state) {
     box.scrollTop = found.offsetTop - box.offsetTop - box.clientHeight / 3;
     box.style.scrollBehavior = "";
   } else if (state.follow || atEnd) {
-    box.style.scrollBehavior = "auto";
-    box.scrollTop = box.scrollHeight;
-    box.style.scrollBehavior = "";
+    // Again once the page has laid out (fonts, formulas): right after the
+    // app starts, the first render comes before that.
+    const toEnd = () => {
+      box.style.scrollBehavior = "auto";
+      box.scrollTop = box.scrollHeight;
+      box.style.scrollBehavior = "";
+    };
+    toEnd();
+    requestAnimationFrame(toEnd);
+    setTimeout(toEnd, 300);
   }
 }
 
