@@ -13,12 +13,17 @@ run with an unlocked database and Settings → Browser Integration on.
                                         name, group; never a password
     keepass.py groups                   the database's groups
     keepass.py add <url> <user> [group] a new entry with a new random password
+    keepass.py type <url> [user] [enter] type an entry's password into the
+                                        window in front, after the user says
+                                        yes in Kuterlapa's overlay; "enter"
+                                        presses Return after it
 
 The address can be any scheme: https://shop.example, rdp://10.0.0.5,
 ssh://host. KeePassXC matches entries by their URL's host.
 
-Passwords never leave this program: "add" makes one and hands it straight
-to KeePassXC, "find" leaves them out. The connection's key is kept in the
+Passwords never reach the model: "add" makes one and hands it straight to
+KeePassXC, "find" leaves them out, and "type" sends it only to Kuterlapa's
+app, which types it. The connection's key is kept in the
 macOS keychain (service "kuterlapa-keepassxc").
 """
 
@@ -27,6 +32,7 @@ import json
 import os
 import secrets
 import string
+import socket
 import struct
 import subprocess
 import sys
@@ -35,6 +41,7 @@ from urllib.parse import urlparse
 from nacl.public import Box, PrivateKey, PublicKey
 
 PROXY = "/Applications/KeePassXC.app/Contents/MacOS/keepassxc-proxy"
+STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "kuterlapa")
 KEYCHAIN = "kuterlapa-keepassxc"
 
 
@@ -258,8 +265,64 @@ def add(kp: KeePassXC, url: str, user: str, group: str | None) -> str:
             f"{', group ' + group if group else ''}, with a new random password (24 characters, not shown).")
 
 
+def kuterlapa(socket_name: str, line: str, wait: float = 10) -> str:
+    """One request to Kuterlapa (shell.sock: the app, core.sock: the core)."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(wait)
+        s.connect(os.path.join(STATE, socket_name))
+        s.sendall((line.replace("\n", " ") + "\n").encode())
+        data = b""
+        while chunk := s.recv(4096):
+            data += chunk
+        return data.decode().strip()
+
+
+def front_window() -> str:
+    """"App — title" of the window in front."""
+    parts = kuterlapa("shell.sock", "window").split("\t")
+    app = parts[1] if len(parts) > 1 else "?"
+    title = parts[2] if len(parts) > 2 else ""
+    return f"{app} — {title}" if title else app
+
+
+def type_password(kp: KeePassXC, url: str, user: str | None, enter: bool) -> str:
+    identity = identity_for(kp)
+    url = normalized(url)
+    answer = kp.call("get-logins", {"url": url, "submitUrl": url, "keys": [{"id": identity["id"], "key": identity["public"]}]})
+    entries = answer.get("entries") or []
+    if user:
+        entries = [e for e in entries if (e.get("login") or "").lower() == user.lower()]
+    if not entries:
+        raise Fail(f"No entry for {url}{' and user ' + user if user else ''}.")
+    if len(entries) > 1:
+        users = ", ".join(e.get("login") or "(none)" for e in entries)
+        raise Fail(f"{len(entries)} entries for {url}: give the user name ({users}).")
+    entry = entries[0]
+    name = entry.get("name") or url
+    login = entry.get("login") or "(no user name)"
+    target = front_window()
+    if "KeePassXC" in target or target.startswith("Kuterlapa"):
+        raise Fail(f"The window in front is {target}: focus the field to fill first.")
+    # The user decides, seeing where the password goes.
+    question = json.dumps({
+        "kind": "question", "title": "KeePass", "tool": "keepass_type", "command": "",
+        "description": f"Wpisać hasło „{name}” ({login}) w okno: {target}?",
+    })
+    if kuterlapa("core.sock", f"approve {question}", wait=150) != "yes":
+        return "The user did not allow it. Nothing was typed."
+    # Something else may have come to the front while the user decided.
+    if front_window() != target:
+        raise Fail(f"The window in front changed to {front_window()}. Nothing was typed.")
+    if kuterlapa("shell.sock", f"type {entry.get('password') or ''}") != "ok":
+        raise Fail("Kuterlapa could not type.")
+    if enter:
+        kuterlapa("shell.sock", "key Return")
+    return (f"Typed the password of {name} ({login}) into {target}"
+            f"{' and pressed Return' if enter else ''}. The password was not shown.")
+
+
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("connect", "find", "groups", "add"):
+    if not argv or argv[0] not in ("connect", "find", "groups", "add", "type"):
         print(__doc__.strip())
         return 2
     kp = None
@@ -274,6 +337,10 @@ def main(argv: list[str]) -> int:
             print("\n".join(path for path, _ in groups(kp)) or "No groups.")
         elif command == "add" and len(args) >= 2:
             print(add(kp, args[0], args[1], args[2] if len(args) > 2 else None))
+        elif command == "type" and args:
+            enter = args[-1] == "enter"
+            rest = args[:-1] if enter else args
+            print(type_password(kp, rest[0], rest[1] if len(rest) > 1 else None, enter))
         else:
             print(__doc__.strip())
             return 2

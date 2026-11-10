@@ -1,0 +1,14 @@
+description = "Type the password of a KeePassXC entry into the field that has the keyboard focus in the window in front: a login window of Remote Desktop, an app or a page. Focus the password field first. The user sees which entry and which window, and says yes or no in the overlay; the password is never shown to you. Use it only when the user asks to log in or to enter a password."
+command = ["uv", "run", "--quiet", "--script", "./keepass.py", "type", "{url}", "{user}", "{enter}"]
+timeout = 170
+
+[params.url]
+description = "The entry's address, for example rdp://10.0.0.5 or https://shop.example"
+
+[params.user]
+description = "The user name, when the address has more than one entry"
+required = false
+
+[params.enter]
+description = "\"enter\" to press Return after the password"
+required = false
