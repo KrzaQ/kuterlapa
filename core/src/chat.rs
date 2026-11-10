@@ -182,15 +182,19 @@ impl Chat {
     }
 
     fn send_recording(&self) {
+        let question = self.stop_recording();
+        self.send(&question);
+    }
+
+    /// Ends the recording and returns what the user said, without asking
+    /// the model yet: the caller sends it (`send`), maybe in another thread.
+    pub fn stop_recording(&self) -> String {
         // Waits until the provider has sent the last words.
         speech::send("finish");
-        let question = {
-            let mut s = self.state.lock().unwrap();
-            s.recording = false;
-            s.countdown = None;
-            std::mem::take(&mut s.pending)
-        };
-        self.send(&question);
+        let mut s = self.state.lock().unwrap();
+        s.recording = false;
+        s.countdown = None;
+        std::mem::take(&mut s.pending)
     }
 
     /// Sends a typed message to the conversation, without speech (`kuterlapa
@@ -209,7 +213,8 @@ impl Chat {
         self.send(text);
     }
 
-    fn send(&self, question: &str) {
+    /// Asks the model and shows the answer; returns when it has come.
+    pub fn send(&self, question: &str) {
         let (mode, question, thread) = {
             let mut s = self.state.lock().unwrap();
             let question = question.trim().to_string();

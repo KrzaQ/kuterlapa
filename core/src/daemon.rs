@@ -332,6 +332,11 @@ fn act(state: &Arc<State>, button: &str) -> String {
         // A dictation for the draft or the chat already runs: the chat
         // buttons do not start a second one.
         Action::Chat | Action::Command1 if state.draft.takes_dictation() => "ok".into(),
+        // Pressed again while the chat records: stop and send it.
+        Action::Chat | Action::Command1 if state.chat.takes_dictation() => {
+            send_chat(state);
+            "ok".into()
+        }
         Action::Chat => {
             forget_dictation(state);
             state.chat.button(Mode::Conversation);
@@ -362,13 +367,21 @@ fn act(state: &Arc<State>, button: &str) -> String {
             state.draft.discard();
             "ok".into()
         }
-        Action::FinishDictation { .. } if state.draft.active() => state.draft.send(),
+        Action::FinishDictation { .. } if state.draft.active() => {
+            in_background(state, |state| {
+                let answer = state.draft.send();
+                if answer != "ok" {
+                    eprintln!("draft: {answer}");
+                }
+            });
+            "ok".into()
+        }
         Action::EraseDictation { .. } if state.chat.active() => {
             state.chat.close();
             "ok".into()
         }
         Action::FinishDictation { .. } if state.chat.takes_dictation() => {
-            state.chat.finish();
+            send_chat(state);
             "ok".into()
         }
         Action::EraseDictation { fallback } => {
@@ -418,6 +431,22 @@ fn show_panel(state: &Arc<State>, overlay: &serde_json::Value) {
 
 /// Hides the help and shows what was there before. Returns false if the
 /// help was not showing.
+/// Ends the chat's recording now, so the next button sees it ended, and
+/// asks the model in the background.
+fn send_chat(state: &Arc<State>) {
+    let question = state.chat.stop_recording();
+    in_background(state, move |state| state.chat.send(&question));
+}
+
+/// Runs a button's work that may wait for a model in its own thread. The
+/// app sends the buttons one at a time and waits for each answer: a button
+/// that waited for the model would hold back every later one, also the A
+/// or B that answers a question during that work.
+fn in_background(state: &Arc<State>, work: impl FnOnce(&State) + Send + 'static) {
+    let state = Arc::clone(state);
+    thread::spawn(move || work(&state));
+}
+
 fn hide_help(state: &State) -> bool {
     if state.help.lock().unwrap().take().is_none() {
         return false;
