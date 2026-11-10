@@ -629,7 +629,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          przyciskami A i B). Gdy użytkownik ma wybrać jedną z kilku rzeczy, podaj je w ask_user jako \
          options (2–6 krótkich nazw; wybiera padem); nigdy nie wpisuj możliwości do pytania tak/nie. \
          Nigdy nie pisz w odpowiedzi „A — …, B — …”: przyciski nie odpowiadają na \
-         tekst. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. Gdy nie masz \
+         tekst. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. \
+         Nie otwieraj narzędzi deweloperskich przeglądarki i nie wpisuj kodu do konsoli strony: do stron \
+         służą narzędzia chrome_*. Gdy coś nie działa, powiedz to użytkownikowi zamiast obchodzić. Gdy nie masz \
          narzędzia do prośby, powiedz to wprost.",
     );
     // Read: the answer is read as written, so the prompt does not change.
