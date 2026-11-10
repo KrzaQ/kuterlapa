@@ -15,6 +15,7 @@ VERSION ?= 0.1.0
 APP_DIR ?= $(HOME)/Applications
 BIN_DIR ?= $(HOME)/.local/bin
 LOG_FILE ?= $(HOME)/Library/Logs/Kuterlapa.log
+SPEECH_SOCKET ?= $(or $(XDG_STATE_HOME),$(HOME)/.local/state)/kuterlapa/speech.sock
 CONFIG_DIR ?= $(or $(XDG_CONFIG_HOME),$(HOME)/.config)/kuterlapa
 DATA_DIR ?= $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/kuterlapa
 # Speech recognition backend to install: mlx (Apple Silicon) or faster-whisper.
@@ -83,6 +84,16 @@ run: ## Start the installed app, logging to LOG_FILE (default ~/Library/Logs/Kut
 	open --stdout $(LOG_FILE) --stderr $(LOG_FILE) $(APP_DIR)/Kuterlapa.app
 
 stop: ## Quit the app and wait until it is gone (the core and the providers stop with it)
+	@# A dictation that runs now would be lost: wait for it to end (at most
+	@# two minutes), and a moment more for its text to be typed.
+	@for i in $$(seq 1 240); do \
+		state=$$(echo status | nc -U $(SPEECH_SOCKET) 2>/dev/null); \
+		if [ -z "$$state" ] || [ "$$state" = idle ]; then \
+			if [ $$i -gt 1 ]; then sleep 2; fi; break; \
+		fi; \
+		if [ $$i -eq 1 ]; then echo "waiting for the dictation to end ($$state)"; fi; \
+		sleep 0.5; \
+	done
 	osascript -e 'quit app "Kuterlapa"'
 	@for i in $$(seq 1 50); do pgrep -qf 'Kuterlapa.app/Contents/MacOS' || exit 0; sleep 0.2; done; \
 		echo "Kuterlapa did not quit in 10 s" >&2; exit 1
