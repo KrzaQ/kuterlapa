@@ -100,7 +100,10 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ("computer_apps", "List the running applications; the one in front is marked with *.", r#"{}"#),
     (
         "computer_zoom",
-        "Make text bigger or smaller, for a user who sits far from the screen. target \"app\": the \
+        "Zoom in or out: make what a window shows bigger or smaller (text, a page, a tab), for a user \
+         who sits far from the screen. Use it when the user asks to enlarge or zoom a window or a tab \
+         (\"powiększ\", \"pomniejsz\", \"zoom\"); it does not change the window's size. Each call is \
+         one step; for \"twice\", call it twice. target \"app\": the \
          application in front (cmd+= / cmd+-; reset: cmd+0), which works in most Mac apps such as \
          Chrome, iTerm or Claude. target \"overlay\": Kuterlapa's own panel in the corner; its size is \
          remembered.",

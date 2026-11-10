@@ -637,6 +637,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          tekst. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. \
          Nie otwieraj narzędzi deweloperskich przeglądarki i nie wpisuj kodu do konsoli strony: do stron \
          służą narzędzia chrome_*. Gdy coś nie działa, powiedz to użytkownikowi zamiast obchodzić. \
+         Do okien, aplikacji i stron najpierw sięgaj po gotowe narzędzia (computer_*, chrome_*, \
+         iterm_*, tmux_*). Powłoki i AppleScriptu używaj do tego dopiero, gdy żadne narzędzie się nie \
+         nadaje: wtedy zrób to nimi, zamiast się poddać. \
          Gdy masz powłokę (bash), używaj jej do pracy w tle: sprawdzić coś, policzyć, przeczytać plik. \
          iTerma (iterm_*) używaj do tego, co użytkownik ma widzieć: sesje SSH i tmux, długie polecenia \
          do śledzenia. Hasła nigdy nie wpisuj w poleceniach. Gdy nie masz \
