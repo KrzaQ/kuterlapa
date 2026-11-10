@@ -5,11 +5,11 @@
 //   tab <window> <tab>         bring that tab to the front
 //   close <window> <tab>...    close tabs of one window (cmd+shift+t in
 //                              Chrome brings a tab back)
-//   open <url> [profile] [new|tab] go to the site's open tab if there is
-//                              one, else open the address in a new tab of
-//                              the front window; with a profile name, in a
-//                              window of that profile; "new": in a new
-//                              window; "tab": a new tab in any case
+//   open <url> [profile] [new|tab] open the address in a new tab of the
+//                              front window, or only list the site's tabs
+//                              when it is open already; with a profile
+//                              name, in a window of that profile; "new":
+//                              in a new window; "tab": a new tab in any case
 //   profiles                   the names of Chrome's profiles
 //
 // Pages, through JavaScript in the tab (Chrome: View, Developer, Allow
@@ -148,28 +148,19 @@ function run(argv) {
 				shell(`open -na "Google Chrome" --args --profile-directory=${quote(dir)}${extra} ${quote(url)}`);
 				return `Opened in profile ${profile}.`;
 			}
-			// The site is open already: go to its tab instead of opening another
-			// one, and load the address there if it asks for a page of the site.
+			// The site is open already: say so, and open nothing. The model
+			// decides: go to one of those tabs (chrome_tab), or open another
+			// one on purpose ("tab"); the user may well want two of a site.
 			if (how !== "new" && how !== "tab") {
 				const host = (u) => { const m = /^[a-z]+:\/\/(?:www\.)?([^/?#]+)/i.exec(u || ""); return m ? m[1].toLowerCase() : ""; };
-				const path = (u) => (/^[a-z]+:\/\/[^/?#]+([^?#]*)/i.exec(u || "") || [])[1] || "/";
 				const wanted = host(url);
-				const windows = c.windows();
-				for (let i = 0; wanted && i < windows.length; i++) {
-					const tabs = windows[i].tabs();
-					for (let j = 0; j < tabs.length; j++) {
-						const current = tabs[j].url();
-						if (host(current) !== wanted) continue;
-						windows[i].activeTabIndex = j + 1;
-						windows[i].index = 1;
-						c.activate();
-						const page = path(url).replace(/\/$/, "");
-						if (page && page !== path(current).replace(/\/$/, "")) {
-							tabs[j].url = url;
-							return `The site was open already: went to tab ${i + 1}.${j + 1} and loaded ${url} there.`;
-						}
-						return `The site was open already: went to tab ${i + 1}.${j + 1} (${tabs[j].title().slice(0, 60)}).`;
-					}
+				const found = [];
+				c.windows().forEach((w, i) => w.tabs().forEach((t, j) => {
+					if (wanted && host(t.url()) === wanted) found.push(`[${i + 1}.${j + 1}] ${t.title().slice(0, 60)} | ${t.url().slice(0, 80)}`);
+				}));
+				if (found.length) {
+					return `Nothing opened: the site is open already in ${found.length === 1 ? "this tab" : "these tabs"}:\n` +
+						found.join("\n") + "\nGo to one with chrome_tab, or call chrome_open again with \"tab\" to open another tab anyway.";
 				}
 			}
 			if (how === "new" || c.windows().length === 0) {
