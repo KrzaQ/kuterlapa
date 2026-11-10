@@ -41,7 +41,9 @@ final class OverlayPanel {
                         styleMask: [.nonactivatingPanel, .borderless],
                         backing: .buffered, defer: true)
         panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        // Not .stationary: a stationary window stays off the desktops of
+        // full-screen apps.
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
