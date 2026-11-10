@@ -4,6 +4,11 @@ import Foundation
 /// Moves the pointer, scrolls and clicks. Needs the Accessibility
 /// permission, like Keystrokes.
 enum Mouse {
+    /// A tool such as Scroll Reverser flips the wheel events it takes for a
+    /// mouse, ours too. The sticks' "scroll-inverted" role says so; then a
+    /// model's scroll is flipped as well, so "down" shows what is below.
+    static var wheelReversed = false
+
     static var location: CGPoint {
         CGEvent(source: nil)?.location ?? .zero
     }

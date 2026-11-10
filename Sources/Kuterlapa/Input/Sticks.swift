@@ -29,6 +29,7 @@ final class Sticks {
     func configure(_ roles: [String: Any]) {
         left = roles["leftstick"] as? String ?? ""
         right = roles["rightstick"] as? String ?? ""
+        Mouse.wheelReversed = left == "scroll-inverted" || right == "scroll-inverted"
         log("sticks: left=\(left.isEmpty ? "-" : left) right=\(right.isEmpty ? "-" : right)")
         if timer == nil, !(left.isEmpty && right.isEmpty) {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in

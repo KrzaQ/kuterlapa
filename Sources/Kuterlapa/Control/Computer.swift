@@ -244,7 +244,8 @@ enum Computer {
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point,
                 mouseButton: .left)?.post(tap: .cghidEventTap)
         usleep(30_000)
-        Mouse.scroll(dx: dx, dy: dy)
+        let sign: Int32 = Mouse.wheelReversed ? -1 : 1
+        Mouse.scroll(dx: sign * dx, dy: sign * dy)
         return "ok"
     }
 
