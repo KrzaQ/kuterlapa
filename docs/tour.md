@@ -57,6 +57,10 @@ overlay then shows the tool's name large, what it does, the exact
 command, and two large buttons: **A · Tak** (yes) and **B · Nie** (no). A
 frame and a sound make sure you notice it.
 
+A model can also ask you itself (`ask_user`): yes or no, or one of a few
+options. Options stand one under another; the d-pad's up and down move the
+mark, A chooses, B cancels.
+
 ### The help
 
 ![The help with the controller's buttons](screenshots/help.png)

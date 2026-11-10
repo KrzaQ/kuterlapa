@@ -16,6 +16,8 @@ final class OverlayPanel {
     /// What the model does while it works: tool calls and thinking, small.
     private let activityLabel = OverlayPanel.label(size: 11, weight: .regular, color: .secondaryLabelColor)
     private let buttonRow = NSStackView()
+    /// The options of a model's question, one under another.
+    private let choiceList = NSStackView()
     private let countdownBar = CountdownBar()
     private let badge = Badge()
     private var titleRow: NSStackView!
@@ -62,6 +64,11 @@ final class OverlayPanel {
         buttonRow.spacing = 10
         buttonRow.isHidden = true
 
+        choiceList.orientation = .vertical
+        choiceList.alignment = .leading
+        choiceList.spacing = 6
+        choiceList.isHidden = true
+
         helpView.orientation = .horizontal
         helpView.alignment = .top
         helpView.spacing = 28
@@ -74,7 +81,7 @@ final class OverlayPanel {
         badge.isHidden = true
 
         let stack = NSStackView(views: [titleRow, statusLabel, countdownBar, headingLabel, textLabel, activityLabel, detailLabel,
-                                        helpView, buttonRow, hintLabel])
+                                        helpView, choiceList, buttonRow, hintLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -87,6 +94,7 @@ final class OverlayPanel {
             stack.topAnchor.constraint(equalTo: background.topAnchor),
             stack.bottomAnchor.constraint(equalTo: background.bottomAnchor),
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28),
+            choiceList.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28),
             countdownBar.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -28),
             countdownBar.heightAnchor.constraint(equalToConstant: 6),
         ])
@@ -144,6 +152,10 @@ final class OverlayPanel {
     ///             {"key": "B", "label": "Nie", "tone": "no"}],
     /// "attention": true
     ///
+    /// A model's question with options: "choices": [{"text": "Do koszyka",
+    /// "selected": true}, ...]. The d-pad moves the mark, so the core sends
+    /// the state again with another option selected.
+    ///
     /// While a model works, what it does, small, below the text:
     /// "activity": [{"kind": "tool", "state": "running" | "done" | "failed",
     ///               "name": "chrome_tabs", "text": "<arguments>"},
@@ -176,6 +188,7 @@ final class OverlayPanel {
         setWidth(help.isEmpty ? width : helpWidth)
         setHelp(help, keyWidth: (state["help_key_width"] as? Double).map { CGFloat($0) } ?? 126,
                 oneColumn: state["help_columns"] as? Int == 1)
+        setChoices(state["choices"] as? [[String: Any]] ?? [])
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
         if let countdown = state["countdown"] as? [String: Any],
            let ends = countdown["ends"] as? Double, let total = countdown["total"] as? Double, total > 0 {
@@ -327,6 +340,46 @@ final class OverlayPanel {
                                                               scale: scale))
         }
         buttonRow.isHidden = buttons.isEmpty
+    }
+
+    private func setChoices(_ choices: [[String: Any]]) {
+        for view in choiceList.arrangedSubviews {
+            choiceList.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        for (i, choice) in choices.enumerated() {
+            let row = OverlayPanel.choice("\(i + 1). \(choice["text"] as? String ?? "")",
+                                          selected: choice["selected"] as? Bool == true, scale: scale)
+            choiceList.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: choiceList.widthAnchor).isActive = true
+        }
+        choiceList.isHidden = choices.isEmpty
+    }
+
+    /// One option: the marked one stands out with a strong frame and color.
+    private static func choice(_ text: String, selected: Bool, scale: CGFloat) -> NSView {
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 9
+        box.layer?.backgroundColor = selected
+            ? NSColor(calibratedRed: 0.95, green: 0.62, blue: 0.25, alpha: 0.9).cgColor
+            : NSColor.white.withAlphaComponent(0.08).cgColor
+        box.layer?.borderWidth = selected ? 2 : 1
+        box.layer?.borderColor = selected ? NSColor.white.withAlphaComponent(0.85).cgColor
+                                          : NSColor.white.withAlphaComponent(0.15).cgColor
+        let label = NSTextField(wrappingLabelWithString: (selected ? "▶ " : "   ") + text)
+        label.font = .systemFont(ofSize: 18 * scale, weight: selected ? .bold : .regular)
+        label.textColor = selected ? .black : .labelColor
+        label.isSelectable = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12 * scale),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12 * scale),
+            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 9 * scale),
+            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -9 * scale),
+        ])
+        return box
     }
 
     /// A large, calm button that shows which controller button to press.

@@ -66,15 +66,19 @@ pub fn run(args: &[String]) -> Result<()> {
                 list.extend(computer::schemas());
                 list.push(json!({
                     "name": "ask_user",
-                    "description": "Ask the user a yes-or-no question and wait for the answer: it shows in the \
-                                    overlay with large Yes (A) and No (B) buttons. Use it whenever you need the \
-                                    user to confirm or choose between two options; never write \"A — …, B — …\" \
-                                    in an answer, as the buttons do not answer text. To act only after a yes, put \
-                                    the action in on_yes (a tool name and its arguments): it runs right after the \
-                                    user presses yes, as the user's answer is their permission. Answers yes or no, \
-                                    and the action's result.",
+                    "description": "Ask the user and wait for the answer in the overlay. Without options it is \
+                                    a yes-or-no question with large Yes (A) and No (B) buttons. To let the user \
+                                    choose between several things, give them in options (2 to 6 short labels): \
+                                    the user picks one with the controller. Never list choices inside a yes-or-no \
+                                    question, and never write \"A — …, B — …\" in an answer, as the buttons do \
+                                    not answer text. To act only after a yes, put the action in on_yes (a tool \
+                                    name and its arguments; not with options): it runs right after the user \
+                                    presses yes, as the user's answer is their permission. Answers yes, no, the \
+                                    chosen option, or that the user cancelled.",
                     "inputSchema": { "type": "object", "properties": {
                         "question": { "type": "string", "description": "Short, ending with a question mark" },
+                        "options": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 6,
+                                     "description": "Optional: the choices, short, in the user's language" },
                         "on_yes": { "type": "object", "description": "Optional: {\"name\": tool, \"arguments\": {...}}",
                             "properties": { "name": { "type": "string" }, "arguments": { "type": "object" } } },
                     }, "required": ["question"] },
@@ -198,13 +202,30 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
     let arguments = params.get("arguments").and_then(Value::as_object).unwrap_or(&empty);
     if name == "ask_user" {
         let question = arguments.get("question").and_then(Value::as_str).unwrap_or_default();
-        eprintln!("tool ask_user: {question}");
-        let request = json!({ "kind": "question", "tool": "ask_user", "description": question, "command": "" });
+        let options: Vec<&str> = arguments
+            .get("options")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|o| !o.trim().is_empty())
+            .collect();
+        if options.len() == 1 || options.len() > crate::approvals::MAX_OPTIONS {
+            return result(format!("options needs 2 to {} choices.", crate::approvals::MAX_OPTIONS), false);
+        }
+        if !options.is_empty() && arguments.get("on_yes").is_some_and(Value::is_object) {
+            return result("on_yes works only without options: ask, then act on the chosen option.".into(), false);
+        }
+        eprintln!("tool ask_user: {question} {options:?}");
+        let request = json!({ "kind": "question", "tool": "ask_user", "description": question, "command": "",
+                              "options": options });
         let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {request}"), APPROVAL_WAIT)
             .unwrap_or_else(|e| format!("error: {e}"));
         let text = match answer.as_str() {
             "yes" => "The user answered: yes.".to_string(),
+            a if a.starts_with("chose ") => format!("The user chose option {}.", &a["chose ".len()..]),
             a if a.contains("did not answer") => "The user did not answer.".to_string(),
+            a if a.contains("cancelled") => "The user cancelled: chose none of the options.".to_string(),
             a if a.starts_with("no") => "The user answered: no.".to_string(),
             other => format!("Could not ask: {other}"),
         };

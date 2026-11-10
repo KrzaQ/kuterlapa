@@ -244,6 +244,9 @@ fn act(state: &Arc<State>, button: &str) -> String {
         // A question about a tool waits: A says yes, B says no.
         Action::FinishDictation { .. } if approvals::answer(true) => "ok".into(),
         Action::EraseDictation { .. } if approvals::answer(false) => "ok".into(),
+        // A model's question with options waits: up and down move the mark.
+        _ if button == "Up" && approvals::move_mark(-1) => "ok".into(),
+        _ if button == "Down" && approvals::move_mark(1) => "ok".into(),
         // While the chat view is open, the d-pad and B work in it.
         _ if view::is_open() && matches!(button, "Up" | "Down" | "Left" | "Right" | "B") => {
             match button {
