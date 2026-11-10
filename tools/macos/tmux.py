@@ -18,6 +18,11 @@
     tmux.py ask-front                     the same for the Claude Code in
                                           iTerm's front tab (a controller
                                           button, without a model)
+    tmux.py do action=<a> [host=<h>] [pane=<p>] [target=<t>]
+                                          change tmux: split, go to another
+                                          pane or window, open a window;
+                                          without a host, the session of
+                                          iTerm's front tab
 
 Claude Code (2.1) draws its questions like this: numbered options, a
 number key picks one (or ticks it, when several may be picked), the
@@ -363,6 +368,62 @@ def ask_front() -> str:
     return result
 
 
+# What tmux_do can do: the tmux command for each, on the pane ("{pane}")
+# or its session ("{session}").
+ACTIONS = {
+    "split-side": ["split-window", "-h", "-t", "{pane}", "-c", "#{pane_current_path}"],
+    "split-below": ["split-window", "-v", "-t", "{pane}", "-c", "#{pane_current_path}"],
+    "pane-up": ["select-pane", "-U", "-t", "{pane}"],
+    "pane-down": ["select-pane", "-D", "-t", "{pane}"],
+    "pane-left": ["select-pane", "-L", "-t", "{pane}"],
+    "pane-right": ["select-pane", "-R", "-t", "{pane}"],
+    "zoom": ["resize-pane", "-Z", "-t", "{pane}"],
+    "window-new": ["new-window", "-t", "{session}:", "-c", "#{pane_current_path}"],
+    "window-next": ["next-window", "-t", "{session}"],
+    "window-previous": ["previous-window", "-t", "{session}"],
+    "window": ["select-window", "-t", "{session}:{target}"],
+    "windows": [],
+}
+
+
+def where(host: str | None, pane: str | None) -> tuple[str, str]:
+    """The host and pane to act on: as given, or iTerm's front tab; on a
+    host without a pane, the pane of its client used last."""
+    if not host:
+        return front()
+    if pane:
+        return host, pane
+    sep = " |~| "
+    listing = tmux(host, "list-clients", "-F", sep.join(["#{session_name}:#{window_index}.#{pane_index}", "#{client_activity}"]))
+    clients = [line.split(sep) for line in listing.splitlines() if line.count(sep) == 1]
+    if not clients:
+        raise Fail(f"No tmux client on {host}: give the pane.")
+    return host, max(clients, key=lambda c: int(c[1] or 0))[0]
+
+
+def do(action: str, host: str | None, pane: str | None, target: str | None) -> str:
+    if action not in ACTIONS:
+        raise Fail(f"No action {action}. Actions: {', '.join(ACTIONS)}")
+    host, pane = where(host, pane)
+    session = pane.split(":")[0]
+    if action == "window" and not target:
+        raise Fail("Give the window's number or name as target.")
+    if action != "windows":
+        args = [a.replace("{pane}", pane).replace("{session}", session).replace("{target}", target or "") for a in ACTIONS[action]]
+        tmux(host, *args)
+    sep = " |~| "
+    windows = tmux(host, "list-windows", "-t", session, "-F",
+                   sep.join(["#{window_index}", "#{window_name}", "#{window_panes}", "#{?window_active,*,}"]))
+    lines = []
+    for line in windows.splitlines():
+        index, name, count, active = (line.split(sep) + ["", "", "", ""])[:4]
+        lines.append(f"{'*' if active else ' '} window {index} {name} ({count} pane{'s' if count != '1' else ''})")
+    now = tmux(host, "display-message", "-p", "-t", session, sep.join(["#{session_name}:#{window_index}.#{pane_index}", "#{pane_current_command}"]))
+    current, command = (now.strip().split(sep) + [""])[:2]
+    at = host if host != "local" else "this Mac"
+    return f"Done: {action} in {session} on {at}. Now in pane {current} ({command}).\n" + "\n".join(lines)
+
+
 def send(host: str, pane: str, text: str) -> str:
     tmux(host, "send-keys", "-t", pane, "-l", "--", text)
     time.sleep(0.2)
@@ -387,6 +448,9 @@ def main(argv: list[str]) -> int:
             print(ask(argv[1], argv[2]))
         elif argv and argv[0] == "ask-front":
             print(ask_front())
+        elif argv and argv[0] == "do":
+            named = dict(a.split("=", 1) for a in argv[1:] if "=" in a)
+            print(do(named.get("action", ""), named.get("host") or None, named.get("pane") or None, named.get("target") or None))
         else:
             print(__doc__.strip())
             return 2

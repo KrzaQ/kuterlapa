@@ -1,0 +1,18 @@
+description = "Change tmux: split the pane side by side (a vertical line, split-side) or one below the other (a horizontal line, split-below), go to the pane above, below, left or right, zoom a pane, open a new window, go to the next, previous or a given window, or list the windows. Without host it acts on the tmux session in iTerm's front tab. Answers the pane in use and the session's windows."
+command = ["python3", "./tmux.py", "do", "action={action}", "host={host}", "pane={pane}", "target={target}"]
+timeout = 40
+
+[params.action]
+description = "split-side, split-below, pane-up, pane-down, pane-left, pane-right, zoom, window-new, window-next, window-previous, window, windows"
+
+[params.host]
+description = "An SSH host alias, or \"local\"; leave it out for iTerm's front tab"
+required = false
+
+[params.pane]
+description = "The pane from tmux_panes; leave it out for the one in use"
+required = false
+
+[params.target]
+description = "For window: its number or name"
+required = false
