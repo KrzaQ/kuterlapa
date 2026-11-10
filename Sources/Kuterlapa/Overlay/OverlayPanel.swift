@@ -174,7 +174,8 @@ final class OverlayPanel {
         let help = state["help"] as? [[String: Any]] ?? []
         panelWidth = (state["width"] as? Double).map { CGFloat($0) }
         setWidth(help.isEmpty ? width : helpWidth)
-        setHelp(help, keyWidth: (state["help_key_width"] as? Double).map { CGFloat($0) } ?? 126)
+        setHelp(help, keyWidth: (state["help_key_width"] as? Double).map { CGFloat($0) } ?? 126,
+                oneColumn: state["help_columns"] as? Int == 1)
         setButtons(state["buttons"] as? [[String: Any]] ?? [])
         if let countdown = state["countdown"] as? [String: Any],
            let ends = countdown["ends"] as? Double, let total = countdown["total"] as? Double, total > 0 {
@@ -222,7 +223,8 @@ final class OverlayPanel {
     /// columns of about the same length.
     /// "help": [{"title": "Mówienie", "rows": [{"keys": "X ×2", "text": "nowy szkic"}]}]
     /// "help_key_width": the width of the keys column (default 126).
-    private func setHelp(_ groups: [[String: Any]], keyWidth: CGFloat) {
+    /// "help_columns": 1 keeps all groups in one column of the whole width.
+    private func setHelp(_ groups: [[String: Any]], keyWidth: CGFloat, oneColumn: Bool) {
         for view in helpView.arrangedSubviews {
             helpView.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -233,13 +235,15 @@ final class OverlayPanel {
         // Fill the left column up to about half of all rows.
         let half = (sizes.reduce(0, +) + 1) / 2
         var split = 0, filled = 0
-        while split < groups.count - 1 && filled + sizes[split] / 2 < half {
+        while !oneColumn && split < groups.count - 1 && filled + sizes[split] / 2 < half {
             filled += sizes[split]
             split += 1
         }
         // One group takes the whole width; more share two columns.
-        let columnWidth = groups.count == 1 ? helpWidth - 28 : (helpWidth - 28 - helpView.spacing) / 2
-        for part in [groups[..<max(split, 1)], groups[max(split, 1)...]] where !part.isEmpty {
+        let whole = groups.count == 1 || oneColumn
+        let columnWidth = whole ? helpWidth - 28 : (helpWidth - 28 - helpView.spacing) / 2
+        let parts = oneColumn ? [groups[...]] : [groups[..<max(split, 1)], groups[max(split, 1)...]]
+        for part in parts where !part.isEmpty {
             let column = NSStackView()
             column.orientation = .vertical
             column.alignment = .leading
