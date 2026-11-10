@@ -35,6 +35,31 @@ pub struct Step {
     pub result: String,
 }
 
+/// One model's use in a request: what the engine reports about it. Claude
+/// reports each model once at the end (with the models Claude Code uses on
+/// its own); pi reports each answer, and pi-censor each classifier call.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Call {
+    /// "model": the profile's model (or one the engine used for it);
+    /// "classifier": pi-censor judging a tool call.
+    pub role: &'static str,
+    pub provider: String,
+    pub model: String,
+    /// Tokens read anew, not from the cache.
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// Of `cache_write`, the part kept for an hour (Claude).
+    pub cache_write_1h: Option<u64>,
+    pub output: u64,
+    /// Of `output`, the thinking, where the engine counts it apart.
+    pub thinking: Option<u64>,
+    pub web_searches: Option<u64>,
+    /// In US dollars, as the engine prices it (Claude: list price).
+    pub cost: Option<f64>,
+    pub ms: Option<u64>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Activity {
     pub started: Instant,
@@ -52,6 +77,8 @@ pub struct Activity {
     /// count comes only at its end; until then, about 4 characters count as
     /// one token.
     output_chars: usize,
+    /// Each model's use, for the statistics.
+    pub calls: Vec<Call>,
     /// The final answer and the error, when the engine has finished.
     pub answer: Option<String>,
     pub error: Option<String>,
@@ -67,6 +94,7 @@ impl Default for Activity {
             input: 0,
             output_done: 0,
             output_chars: 0,
+            calls: Vec::new(),
             answer: None,
             error: None,
         }
@@ -228,6 +256,22 @@ impl Activity {
                 changed
             }
             Some("result") => {
+                for (model, u) in e["modelUsage"].as_object().into_iter().flatten() {
+                    self.calls.push(Call {
+                        role: "model",
+                        provider: "anthropic".into(),
+                        model: model.clone(),
+                        input: number(&u["inputTokens"]),
+                        cache_read: number(&u["cacheReadInputTokens"]),
+                        cache_write: number(&u["cacheCreationInputTokens"]),
+                        cache_write_1h: u["cacheCreationEphemeral1hInputTokens"].as_u64(),
+                        output: number(&u["outputTokens"]),
+                        thinking: u["thinkingTokens"].as_u64(),
+                        web_searches: u["webSearchRequests"].as_u64(),
+                        cost: u["costUSD"].as_f64(),
+                        ms: None,
+                    });
+                }
                 if e["is_error"].as_bool().unwrap_or(false) {
                     let error = e["result"].as_str().or(e["subtype"].as_str()).unwrap_or("error");
                     self.error = Some(error.to_string());
@@ -278,9 +322,16 @@ impl Activity {
                 self.finish_step(str(&e["toolCallId"]), failed, &e["result"]["content"]);
                 true
             }
+            // pi-censor's classifier call, reported with pi.appendEntry.
+            Some("entry_appended") if e["entry"]["customType"] == "pi-censor-usage" => {
+                let data = &e["entry"]["data"];
+                self.calls.push(pi_call("classifier", &data["provider"], &data["model"], &data["usage"], &data["ms"]));
+                false
+            }
             Some("message_end") if e["message"]["role"] == "assistant" => {
                 let message = &e["message"];
                 let usage = &message["usage"];
+                self.calls.push(pi_call("model", &message["provider"], &message["model"], usage, &message["durationMs"]));
                 self.input += ["input", "cacheRead", "cacheWrite"].iter().map(|k| usage[k].as_u64().unwrap_or(0)).sum::<u64>();
                 self.output_done += usage["output"].as_u64().unwrap_or(0);
                 self.output_chars = 0;
@@ -309,6 +360,30 @@ impl Activity {
 
 fn str(v: &Value) -> &str {
     v.as_str().unwrap_or("")
+}
+
+fn number(v: &Value) -> u64 {
+    v.as_u64().unwrap_or(0)
+}
+
+/// A call from pi's usage (`Usage` in pi's message types).
+fn pi_call(role: &'static str, provider: &Value, model: &Value, usage: &Value, ms: &Value) -> Call {
+    // pi writes 0 for thinking it cannot count apart: that is unknown.
+    let thinking = usage["reasoning"].as_u64().filter(|&n| n > 0);
+    Call {
+        role,
+        provider: str(provider).into(),
+        model: str(model).into(),
+        input: number(&usage["input"]),
+        cache_read: number(&usage["cacheRead"]),
+        cache_write: number(&usage["cacheWrite"]),
+        cache_write_1h: usage["cacheWrite1h"].as_u64(),
+        output: number(&usage["output"]),
+        thinking,
+        web_searches: None,
+        cost: usage["cost"]["total"].as_f64(),
+        ms: ms.as_u64(),
+    }
 }
 
 /// The tokens of a call's context: new, cached and written to the cache.
@@ -395,7 +470,7 @@ mod tests {
             r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"Window 1\n  Inbox"}]}]}}"#,
             r#"{"type":"stream_event","event":{"type":"message_start","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":6947}}}}"#,
             r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"12345678"}}}"#,
-            r#"{"type":"result","is_error":false,"result":" 7 tabs. "}"#,
+            r#"{"type":"result","is_error":false,"result":" 7 tabs. ","modelUsage":{"claude-opus-5-5":{"inputTokens":4,"outputTokens":96,"cacheReadInputTokens":6947,"cacheCreationInputTokens":7049,"cacheCreationEphemeral1hInputTokens":7049,"thinkingTokens":20,"webSearchRequests":0,"costUSD":0.08}}}"#,
         ];
         let mut a = Activity::default();
         for line in lines {
@@ -410,6 +485,23 @@ mod tests {
         assert_eq!(a.input, 6949 + 7049);
         assert_eq!(a.output(), 82 + 2);
         assert_eq!(a.answer.as_deref(), Some("7 tabs."));
+        assert_eq!(
+            a.calls,
+            vec![Call {
+                role: "model",
+                provider: "anthropic".into(),
+                model: "claude-opus-5-5".into(),
+                input: 4,
+                cache_read: 6947,
+                cache_write: 7049,
+                cache_write_1h: Some(7049),
+                output: 96,
+                thinking: Some(20),
+                web_searches: Some(0),
+                cost: Some(0.08),
+                ms: None,
+            }]
+        );
     }
 
     #[test]
@@ -420,6 +512,7 @@ mod tests {
             r#"{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"The user asks"}}"#,
             r#"{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","id":"c1","toolName":"mcp__kuterlapa__computer_apps"}}"#,
             r#"{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","toolCall":{"id":"c1","arguments":{}}}}"#,
+            r#"{"type":"entry_appended","entry":{"type":"custom","customType":"pi-censor-usage","data":{"tool":"t","provider":"ollama","model":"qwen","usage":{"input":456,"output":177,"cacheRead":0,"cacheWrite":0,"reasoning":0,"cost":{"total":0}},"ms":2646,"stopReason":"stop"}}}"#,
             r#"{"type":"tool_execution_end","toolCallId":"c1","isError":true,"result":{"content":[{"type":"text","text":"no access"}]}}"#,
             r#"{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking"},{"type":"text","text":"Safari."}],"stopReason":"stop","usage":{"input":519,"output":42,"cacheRead":0,"cacheWrite":0}}}"#,
         ];
@@ -434,6 +527,9 @@ mod tests {
         assert_eq!((a.input, a.output()), (519, 42));
         assert_eq!(a.answer.as_deref(), Some("Safari."));
         assert_eq!(a.error, None);
+        let roles: Vec<_> = a.calls.iter().map(|c| (c.role, c.model.as_str(), c.input, c.ms)).collect();
+        assert_eq!(roles, vec![("model", "", 0, None), ("classifier", "qwen", 456, Some(2646)), ("model", "", 519, None)]);
+        assert_eq!(a.calls[1].thinking, None);
     }
 
     #[test]

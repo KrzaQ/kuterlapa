@@ -94,7 +94,10 @@ All in `~/.config/kuterlapa/`:
 - `sessions/<name>/`: a session's `context.md` (what the model should
   know) and `session.toml` (`folder`: the project folder the model runs in).
 - History of conversations and one-off commands:
-  `~/.local/share/kuterlapa/kuterlapa.db` (SQLite).
+  `~/.local/share/kuterlapa/kuterlapa.db` (SQLite). The same file keeps
+  the token statistics (table `usage`): one row for each model in each
+  request, with pi-censor's classifier calls apart. `kuterlapa stats
+  [today|week|month|all]` prints them.
 - `mapping.json`: button → action. A button can also have a double press
   (`"X double"`) and a hold (`"Y hold"`); only buttons that have them wait
   to tell the gestures apart. `"LeftStick"` and `"RightStick"` take
@@ -102,6 +105,7 @@ All in `~/.config/kuterlapa/`:
   when a tool such as Scroll Reverser flips mouse wheel events: it takes
   the stick for a mouse. An action is `"dictate"`, `"draft"`,
   `"chat"`, `"command"`, `"voice-toggle"`, `"recall"`, `"next-profile"`,
+  `"help"`, `"sessions"`, `"view"`, `"usage"` (today's token statistics),
   `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation, or press Escape),

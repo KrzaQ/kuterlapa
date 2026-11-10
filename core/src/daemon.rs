@@ -42,6 +42,7 @@ pub fn run(config: Config) -> Result<()> {
     crate::embed::supervise(config.embed.command);
     let store = Arc::new(Store::open()?);
     view::init(Arc::clone(&store));
+    crate::usage::init(Arc::clone(&store));
     let profiles = Arc::new(Current::new());
     let state = Arc::new(State {
         mapping: Mutex::new(Mapping::new()),
@@ -189,6 +190,16 @@ fn handle(state: &Arc<State>, line: &str) -> String {
                 show_panel(state, &sessions::panel());
                 "ok".into()
             }
+            // "usage" or "usage week".
+            usage if usage.split_whitespace().next() == Some("usage") => {
+                match crate::usage::Period::parse(usage.split_whitespace().nth(1).unwrap_or("")) {
+                    Ok(period) => {
+                        show_panel(state, &crate::usage::panel(period));
+                        "ok".into()
+                    }
+                    Err(e) => format!("error: {e}"),
+                }
+            }
             other => format!("error: no panel {other}"),
         },
         "speech" => speech::send(argument),
@@ -259,6 +270,12 @@ fn act(state: &Arc<State>, button: &str) -> String {
         Action::Sessions => {
             if !hide_help(state) {
                 show_panel(state, &sessions::panel());
+            }
+            "ok".into()
+        }
+        Action::Usage => {
+            if !hide_help(state) {
+                show_panel(state, &crate::usage::panel(crate::usage::Period::Today));
             }
             "ok".into()
         }

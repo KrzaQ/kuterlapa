@@ -46,12 +46,13 @@ mod search;
 mod store;
 mod submit;
 mod tools;
+mod usage;
 mod view;
 mod voice;
 
 use anyhow::{bail, Result};
 
-const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] | export [session] [--all] | press <button> | speech <request> | ask <text> | say <text> | voice <request> | type <text> | key <combo> | status";
+const USAGE: &str = "usage: kuterlapa daemon | mcp [--session <name>] [--local] | export [session] [--all] | stats [today|week|month|all] | press <button> | speech <request> | ask <text> | say <text> | voice <request> | type <text> | key <combo> | status";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -64,6 +65,7 @@ fn main() -> Result<()> {
         "daemon" => return daemon::run(config::load()?),
         "mcp" => return mcp::run(rest_args),
         "export" => return export::run(rest_args),
+        "stats" => return usage::run(rest_args),
         "press" => format!("button {rest}"),
         "speech" | "say" | "voice" | "type" | "key" | "ask" => format!("{command} {rest}"),
         "status" => "status".to_string(),

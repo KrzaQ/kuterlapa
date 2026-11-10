@@ -70,7 +70,7 @@ pub fn is_cancelled(error: &anyhow::Error) -> bool {
 
 /// One request without tools.
 pub fn complete(profile: &Profile, system: &str, user: &str) -> Result<String> {
-    complete_in(profile, system, user, None, None, &|_| {})
+    run(profile, system, user, None, None, &|_| {}, "draft")
 }
 
 /// Like `complete`, run in `folder`: the engine then reads that project's
@@ -88,6 +88,19 @@ pub fn complete_in(
     folder: Option<&Path>,
     tools: Option<&str>,
     progress: &dyn Fn(&Activity),
+) -> Result<String> {
+    run(profile, system, user, folder, tools, progress, "chat")
+}
+
+/// `purpose` goes to the token statistics: "chat" or "draft".
+fn run(
+    profile: &Profile,
+    system: &str,
+    user: &str,
+    folder: Option<&Path>,
+    tools: Option<&str>,
+    progress: &dyn Fn(&Activity),
+    purpose: &str,
 ) -> Result<String> {
     let mut command = match profile.engine.as_str() {
         "claude" => claude(profile, system, user, folder.is_some(), tools),
@@ -124,6 +137,9 @@ pub fn complete_in(
     }
     activity.finished = Some(activity.started.elapsed());
     progress(&activity);
+    // Saved even when cancelled: the tokens were used.
+    let session = tools.map(str::to_string).unwrap_or_else(crate::sessions::current_name);
+    crate::usage::record(profile, &session, purpose, &activity.calls);
     let status = child.wait();
     let errors = errors.join().unwrap_or_default();
     let cancelled = {

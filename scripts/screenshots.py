@@ -137,6 +137,26 @@ SESSIONS = {
     "hint": "Powiedz: „przejdź do sesji …” · B: zamknij · zamyka się sama po 30 s",
 }
 
+USAGE = {
+    "title": "Zużycie modeli · dziś",
+    "help": [
+        {"title": "Odpowiedzi i polecenia", "rows": [
+            {"keys": "claude-opus-5-5", "text": "w 4 zapytaniach · wejście 31 · z cache 128k · zapis do cache 42,0k · wyjście 2,1k (myślenie 640) · $0,74"},
+            {"keys": "qwen3-8b", "text": "9 wywołań · wejście 38,2k · z cache 61,5k · wyjście 1,9k · 1 min 12 s"},
+        ]},
+        {"title": "Poprawki szkicu", "rows": [
+            {"keys": "qwen3-8b", "text": "3 wywołania · wejście 2,4k · wyjście 310 · 6 s"},
+        ]},
+        {"title": "Klasyfikator pi-censora", "rows": [
+            {"keys": "qwen3-8b", "text": "5 wywołań · wejście 5,6k · wyjście 820 · 11 s"},
+        ]},
+    ],
+    "help_key_width": 210,
+    "help_columns": 1,
+    "width": 780,
+    "hint": "Powiedz: „pokaż zużycie z tygodnia” · B: zamknij · zamyka się sama po 30 s",
+}
+
 VIEW = {
     "visible": True,
     "scale": 1.15,
@@ -189,6 +209,7 @@ def main():
         overlay("consent", CONSENT)
         overlay("help", HELP)
         overlay("sessions", SESSIONS)
+        overlay("usage", USAGE, wait=1.2)
         shell('overlay {"visible": false}')
         shell("view " + json.dumps({**VIEW, "backdrop": False}))
         time.sleep(1.5)

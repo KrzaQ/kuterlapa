@@ -42,6 +42,27 @@ CREATE TABLE IF NOT EXISTS embeddings (
     hash TEXT NOT NULL,          -- of the text, to notice changes
     vector BLOB NOT NULL         -- little-endian f32
 );
+CREATE TABLE IF NOT EXISTS usage (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    session TEXT,
+    profile TEXT,
+    purpose TEXT NOT NULL,       -- 'chat' or 'draft': what the request was for
+    role TEXT NOT NULL,          -- 'model' or 'classifier' (pi-censor)
+    engine TEXT NOT NULL,        -- 'claude' or 'pi'
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input INTEGER NOT NULL,      -- read anew, not from the cache
+    cache_read INTEGER NOT NULL,
+    cache_write INTEGER NOT NULL,
+    cache_write_1h INTEGER,
+    output INTEGER NOT NULL,
+    thinking INTEGER,            -- part of output, where the engine counts it
+    web_searches INTEGER,
+    cost REAL,                   -- US dollars, as the engine prices it
+    ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS usage_by_time ON usage(at);
 CREATE INDEX IF NOT EXISTS messages_by_conversation ON messages(conversation, id);
 CREATE INDEX IF NOT EXISTS commands_by_thread ON commands(thread, id);
 ";
@@ -307,6 +328,86 @@ impl Store {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare("SELECT role, text FROM commands WHERE thread = ?1 ORDER BY id")?;
         let rows = stmt.query_map(params![thread], |r| Ok(Message { role: r.get(0)?, text: r.get(1)? }))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+}
+
+/// One model's use in one request, for the `usage` table.
+pub struct UsageRow<'a> {
+    pub session: &'a str,
+    pub profile: &'a str,
+    pub purpose: &'a str,
+    pub engine: &'a str,
+    pub call: &'a crate::activity::Call,
+}
+
+/// The sums of one group (purpose, role, provider, model) in a period.
+#[derive(Debug, Clone, Default)]
+pub struct UsageSum {
+    pub purpose: String,
+    pub role: String,
+    pub provider: String,
+    pub model: String,
+    pub calls: u64,
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub output: u64,
+    /// None when no call in the group counted it.
+    pub thinking: Option<u64>,
+    pub web_searches: Option<u64>,
+    pub cost: Option<f64>,
+    pub ms: Option<u64>,
+}
+
+impl Store {
+    pub fn add_usage(&self, row: &UsageRow) -> Result<()> {
+        let c = row.call;
+        let db = self.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO usage (session, profile, purpose, role, engine, provider, model, input, cache_read,
+                                cache_write, cache_write_1h, output, thinking, web_searches, cost, ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                row.session, row.profile, row.purpose, c.role, row.engine, c.provider, c.model,
+                c.input as i64, c.cache_read as i64, c.cache_write as i64, c.cache_write_1h.map(|n| n as i64),
+                c.output as i64, c.thinking.map(|n| n as i64), c.web_searches.map(|n| n as i64), c.cost,
+                c.ms.map(|n| n as i64)
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Sums since a time, most tokens first. `since` is a fixed SQLite
+    /// expression from usage.rs (`datetime('now', '-7 days')`); None: all.
+    pub fn usage_sums(&self, since: Option<&'static str>) -> Result<Vec<UsageSum>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(&format!(
+            "SELECT purpose, role, provider, model, COUNT(*), SUM(input), SUM(cache_read), SUM(cache_write),
+                    SUM(output), SUM(thinking), SUM(web_searches), SUM(cost), SUM(ms)
+             FROM usage WHERE at >= {} GROUP BY purpose, role, provider, model
+             ORDER BY SUM(input + cache_read + cache_write + output) DESC",
+            since.unwrap_or("''")
+        ))?;
+        let rows = stmt.query_map([], |r| {
+            let n = |i: usize| -> rusqlite::Result<u64> { Ok(r.get::<_, Option<i64>>(i)?.unwrap_or(0) as u64) };
+            let opt = |i: usize| -> rusqlite::Result<Option<u64>> { Ok(r.get::<_, Option<i64>>(i)?.map(|v| v as u64)) };
+            Ok(UsageSum {
+                purpose: r.get(0)?,
+                role: r.get(1)?,
+                provider: r.get(2)?,
+                model: r.get(3)?,
+                calls: n(4)?,
+                input: n(5)?,
+                cache_read: n(6)?,
+                cache_write: n(7)?,
+                output: n(8)?,
+                thinking: opt(9)?,
+                web_searches: opt(10)?,
+                cost: r.get(11)?,
+                ms: opt(12)?,
+            })
+        })?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 }

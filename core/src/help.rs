@@ -179,6 +179,7 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::VoiceStop => (Model, "cisza", "ucisz lektora (i zatrzymaj telewizor)".into()),
         Action::Help => (Model, "ta pomoc", "pokaż albo schowaj tę pomoc".into()),
         Action::Sessions => (Model, "ostatnie sesje", "pokaż albo schowaj ostatnio używane sesje".into()),
+        Action::Usage => (Model, "zużycie tokenów", "pokaż albo schowaj dzisiejsze zużycie modeli".into()),
         Action::View => (
             Model,
             "widok czatu",

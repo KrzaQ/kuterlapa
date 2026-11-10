@@ -57,6 +57,8 @@ pub enum Action {
     Help,
     /// Show the recently used sessions, or hide them.
     Sessions,
+    /// Show today's token statistics, or hide them.
+    Usage,
     /// Open the large chat view, or close it.
     View,
 }
@@ -73,6 +75,7 @@ impl Action {
             "voice-stop" => return Some(Action::VoiceStop),
             "help" => return Some(Action::Help),
             "sessions" => return Some(Action::Sessions),
+            "usage" => return Some(Action::Usage),
             "view" => return Some(Action::View),
             _ => {}
         }

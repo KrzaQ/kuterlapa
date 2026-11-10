@@ -82,6 +82,18 @@ pub fn run(args: &[String]) -> Result<()> {
                 list.extend(memory_schemas());
                 list.extend(session_schemas());
                 list.push(json!({
+                    "name": "usage_stats",
+                    "description": "How many tokens the models used through Kuterlapa, per model: answers, \
+                                    draft corrections and pi-censor's classifier, with cache reads and \
+                                    writes, thinking, cost and time where the engine reports them. \
+                                    show: true also puts the table on the user's screen.",
+                    "inputSchema": { "type": "object", "properties": {
+                        "period": { "type": "string", "enum": ["today", "week", "month", "all"],
+                                    "description": "Default today" },
+                        "show": { "type": "boolean", "description": "Show it on screen too" },
+                    } },
+                }));
+                list.push(json!({
                     "name": "kuterlapa_help",
                     "description": "How to use Kuterlapa, the app the user talks to you through: what each \
                                     controller button does (from the user's current settings) and how voice, \
@@ -228,6 +240,13 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
         };
         return result(text, ok);
     }
+    if name == "usage_stats" {
+        let (text, ok) = match usage_stats(arguments) {
+            Ok(text) => (text, true),
+            Err(e) => (format!("error: {e:#}"), false),
+        };
+        return json!({ "content": [{ "type": "text", "text": text }], "isError": !ok });
+    }
     if name == "kuterlapa_help" {
         let text = help::text(&mut Mapping::new());
         return json!({ "content": [{ "type": "text", "text": text }], "isError": false });
@@ -274,7 +293,7 @@ fn result(text: String, ok: bool) -> Value {
 /// none yet: which only read, and which delete. Tools from files and the
 /// computer tools set their own.
 fn annotate(list: &mut [Value]) {
-    const READ_ONLY: &[&str] = &["memory_read", "memory_search", "session_list", "kuterlapa_help"];
+    const READ_ONLY: &[&str] = &["memory_read", "memory_search", "session_list", "kuterlapa_help", "usage_stats"];
     const DESTRUCTIVE: &[&str] = &["memory_forget", "session_delete"];
     for tool in list.iter_mut() {
         if tool.get("annotations").is_some() {
@@ -553,4 +572,20 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
         }
         other => anyhow::bail!("no tool {other}"),
     }
+}
+
+/// The token statistics; with "show", also the panel on screen.
+fn usage_stats(arguments: &serde_json::Map<String, Value>) -> anyhow::Result<String> {
+    let period = crate::usage::Period::parse(arguments.get("period").and_then(Value::as_str).unwrap_or(""))?;
+    let store = crate::store::Store::open()?;
+    let mut text = crate::usage::text(&crate::usage::sums(&store, period)?, period);
+    if arguments.get("show").and_then(Value::as_bool).unwrap_or(false) {
+        let request = format!("panel usage {}", arguments.get("period").and_then(Value::as_str).unwrap_or("today"));
+        let answer = socket::request(&paths::core_socket(), &request)?;
+        if answer != "ok" {
+            anyhow::bail!("{answer}");
+        }
+        text.push_str("\nThe table is on screen; B closes it. Do not read all of it out.");
+    }
+    Ok(text)
 }

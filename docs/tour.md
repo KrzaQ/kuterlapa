@@ -75,6 +75,20 @@ notes for the models, speech recognition words and project folder. Holding
 + shows the recently used ones; a voice command switches between them. A
 session can also follow the window in front.
 
+### Token statistics
+
+![Token use per model](screenshots/usage.png)
+
+How many tokens each model used: today, in the last 7 or 30 days, or in
+all. Answers and commands, draft corrections and pi-censor's classifier
+are apart. For each model: tokens read anew, read from the cache and
+written to it, written (with the thinking, where the engine counts it),
+web searches, cost and time, where the engine reports them. Claude reports
+each model once for a whole request, also the models Claude Code uses on
+its own. pi reports each call. pi-censor reports its classifier calls as
+`pi-censor-usage` session entries. A model shows this panel with
+`usage_stats`; `kuterlapa stats` prints it.
+
 ## The chat view
 
 ![The chat view on the whole screen](screenshots/chat-view.png)
