@@ -1,0 +1,13 @@
+description = "Add a KeePassXC entry with a new random password (24 characters). KeePassXC names the entry after the address's host, for example shop.example. The password goes straight into KeePassXC and is never shown, to you or anyone. Fails if the address already has an entry for this user name. Look at keepass_find for similar sites first, to follow the user's way of naming user names, and use keepass_groups for the group."
+command = ["uv", "run", "--quiet", "--script", "./keepass.py", "add", "{url}", "{user}", "{group}"]
+timeout = 30
+
+[params.url]
+description = "The site's address without www, for example https://shop.example"
+
+[params.user]
+description = "The user name or e-mail for the site"
+
+[params.group]
+description = "The group path, for example Passwords/Internet"
+required = false

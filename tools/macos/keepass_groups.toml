@@ -1,0 +1,4 @@
+description = "List the groups (folders) of the open KeePassXC database, as paths like Passwords/Internet."
+command = ["uv", "run", "--quiet", "--script", "./keepass.py", "groups"]
+timeout = 30
+read_only = true

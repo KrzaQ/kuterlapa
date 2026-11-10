@@ -1,0 +1,7 @@
+description = "Find KeePassXC entries for an address: title, user name and group of each, never the password. The address can be a web site (https://shop.example or shop.example), or rdp://host, ssh://host and so on: KeePassXC matches entries by the host in their URL field."
+command = ["uv", "run", "--quiet", "--script", "./keepass.py", "find", "{url}"]
+timeout = 30
+read_only = true
+
+[params.url]
+description = "The address, for example shop.example or rdp://10.0.0.5"

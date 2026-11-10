@@ -1,0 +1,3 @@
+description = "Connect Kuterlapa to the open KeePassXC database, once. KeePassXC then shows a window where the user allows the connection and gives it a name (for example Kuterlapa). Needs KeePassXC running, its database unlocked, and Settings → Browser Integration on. Use it only when another keepass tool says Kuterlapa is not connected."
+command = ["uv", "run", "--quiet", "--script", "./keepass.py", "connect"]
+timeout = 130
