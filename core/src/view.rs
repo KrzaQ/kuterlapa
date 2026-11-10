@@ -1,5 +1,5 @@
 //! The large chat view (Share): the current session's conversations and
-//! the one-off commands that saw its context, in the order they started,
+//! the one-off commands that saw its context, in the order of their latest message,
 //! drawn by the platform shell ("view <json>" on shell.sock). While it is
 //! open, the core sends the controller to it: ↑ ↓ scroll, ← → older and
 //! newer items, B closes. A model can open it at a message it found
@@ -39,6 +39,8 @@ struct Item {
     kind: Kind,
     id: i64,
     created: String,
+    /// When its latest message came: the order of the items.
+    last: String,
 }
 
 pub fn init(store: std::sync::Arc<Store>) {
@@ -54,16 +56,18 @@ fn items(store: &Store, session: &str) -> Vec<Item> {
         .conversations(session)
         .unwrap_or_default()
         .into_iter()
-        .map(|(id, created)| Item { kind: Kind::Conversation, id, created })
+        .map(|(id, created, last)| Item { kind: Kind::Conversation, id, created, last })
         .chain(
             store
                 .threads(session)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|(id, created)| Item { kind: Kind::Command, id, created }),
+                .map(|(id, created, last)| Item { kind: Kind::Command, id, created, last }),
         )
         .collect();
-    items.sort_by(|a, b| a.created.cmp(&b.created));
+    // By the latest message, not the start: the conversation the user
+    // talks in now is the newest even when it began before a command.
+    items.sort_by(|a, b| a.last.cmp(&b.last));
     items
 }
 

@@ -186,14 +186,17 @@ impl Store {
 
     /// The ids of a session's conversations that have messages, oldest
     /// first, with when each started (local time).
-    pub fn conversations(&self, session: &str) -> Result<Vec<(i64, String)>> {
+    /// A session's conversations that have messages, oldest first: id, when
+    /// it started (local time) and when its latest message came (UTC, for
+    /// ordering).
+    pub fn conversations(&self, session: &str) -> Result<Vec<(i64, String, String)>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT c.id, strftime('%Y-%m-%d %H:%M', c.created, 'localtime') FROM conversations c
-             WHERE c.session = ?1 AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation = c.id)
-             ORDER BY c.id",
+            "SELECT c.id, strftime('%Y-%m-%d %H:%M', c.created, 'localtime'), MAX(m.created)
+             FROM conversations c JOIN messages m ON m.conversation = c.id
+             WHERE c.session = ?1 GROUP BY c.id ORDER BY c.id",
         )?;
-        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -214,13 +217,13 @@ impl Store {
 
     /// The command threads that saw a session's context, oldest first, with
     /// when each started (local time).
-    pub fn threads(&self, session: &str) -> Result<Vec<(i64, String)>> {
+    pub fn threads(&self, session: &str) -> Result<Vec<(i64, String, String)>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT thread, strftime('%Y-%m-%d %H:%M', MIN(created), 'localtime') FROM commands
+            "SELECT thread, strftime('%Y-%m-%d %H:%M', MIN(created), 'localtime'), MAX(created) FROM commands
              WHERE context_session = ?1 GROUP BY thread ORDER BY MIN(id)",
         )?;
-        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let rows = stmt.query_map(params![session], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 

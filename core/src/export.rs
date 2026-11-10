@@ -47,7 +47,7 @@ pub fn export(store: &Store, session: Option<&str>, all: bool) -> Result<Vec<Pat
         bail!("session {name} has no conversations");
     }
     let chosen: Vec<_> = if all { conversations } else { conversations.into_iter().last().into_iter().collect() };
-    chosen.iter().map(|(id, created)| write(store, &session, *id, created)).collect()
+    chosen.iter().map(|(id, created, _)| write(store, &session, *id, created)).collect()
 }
 
 /// `kuterlapa export [session] [--all]`
