@@ -1,4 +1,4 @@
-description = "Open an address in Google Chrome: a new tab in the front window, or a window of a given profile (chrome_profiles lists them)."
+description = "Open an address in Google Chrome. When a tab of the same site is open already, it goes to that tab (and loads the address there if it is another page of the site) instead of opening one more. Otherwise a new tab in the front window, or a window of a given profile (chrome_profiles lists them). Do not open again what is open: after chrome_open, just use the tab."
 command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "open", "{url}", "{profile}", "{new_window}"]
 timeout = 20
 
@@ -10,5 +10,5 @@ description = "A profile name; leave it out for the front window"
 required = false
 
 [params.new_window]
-description = "\"new\" to open a new window instead of a tab"
+description = "\"new\" for a new window, \"tab\" for a new tab even when the site is open already"
 required = false
