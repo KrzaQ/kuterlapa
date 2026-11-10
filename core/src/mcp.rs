@@ -79,6 +79,7 @@ pub fn run(args: &[String]) -> Result<()> {
                         "question": { "type": "string", "description": "Short, ending with a question mark" },
                         "options": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 6,
                                      "description": "Optional: the choices, short, in the user's language" },
+                        "multiple": { "type": "boolean", "description": "With options: the user may pick several" },
                         "on_yes": { "type": "object", "description": "Optional: {\"name\": tool, \"arguments\": {...}}",
                             "properties": { "name": { "type": "string" }, "arguments": { "type": "object" } } },
                     }, "required": ["question"] },
@@ -217,12 +218,14 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
             return result("on_yes works only without options: ask, then act on the chosen option.".into(), false);
         }
         eprintln!("tool ask_user: {question} {options:?}");
+        let multiple = arguments.get("multiple").and_then(Value::as_bool).unwrap_or(false);
         let request = json!({ "kind": "question", "tool": "ask_user", "description": question, "command": "",
-                              "options": options });
+                              "options": options, "multiple": multiple });
         let answer = socket::request_waiting(&paths::core_socket(), &format!("approve {request}"), APPROVAL_WAIT)
             .unwrap_or_else(|e| format!("error: {e}"));
         let text = match answer.as_str() {
             "yes" => "The user answered: yes.".to_string(),
+            a if a.starts_with("chose ") && multiple => format!("The user chose options {}.", &a["chose ".len()..]),
             a if a.starts_with("chose ") => format!("The user chose option {}.", &a["chose ".len()..]),
             a if a.contains("did not answer") => "The user did not answer.".to_string(),
             a if a.contains("cancelled") => "The user cancelled: chose none of the options.".to_string(),
