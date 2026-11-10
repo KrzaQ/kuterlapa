@@ -61,6 +61,10 @@ A model can also ask you itself (`ask_user`): yes or no, or one of a few
 options. Options stand one under another; the d-pad's up and down move the
 mark, A chooses, B cancels.
 
+pi runs in its RPC mode, so its extensions can ask too. When pi-censor is
+unsure of a tool call, its question (allow once, allow for the rest of
+the conversation, deny) shows the same way.
+
 ### The help
 
 ![The help with the controller's buttons](screenshots/help.png)

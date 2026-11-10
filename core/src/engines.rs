@@ -1,5 +1,7 @@
 //! Engines: programs that run a language model for a profile. Each call is
-//! one request: a system prompt, a user message, an answer. With a session,
+//! one request: a system prompt, a user message, an answer. pi runs in its
+//! RPC mode, so that its extensions can ask the user (pi-censor asks before
+//! a call it is unsure of): the overlay shows such a question. With a session,
 //! the model also gets the tools (tools.rs) through `kuterlapa mcp`: Claude
 //! with --mcp-config, pi with a small extension (pi-tools.ts). Claude also
 //! gets web search.
@@ -8,8 +10,8 @@ use crate::activity::Activity;
 use crate::paths;
 use crate::profiles::Profile;
 use anyhow::{bail, Context, Result};
-use serde_json::json;
-use std::io::{BufRead, BufReader, Read};
+use serde_json::{json, Value};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -104,11 +106,12 @@ fn run(
 ) -> Result<String> {
     let mut command = match profile.engine.as_str() {
         "claude" => claude(profile, system, user, folder.is_some(), tools),
-        "pi" => pi(profile, system, user, folder.is_some(), tools),
+        "pi" => pi(profile, system, folder.is_some(), tools),
         other => bail!("unknown engine {other:?} in profile {:?}", profile.name),
     };
     let state = paths::state_dir();
-    command.current_dir(folder.unwrap_or(&state)).stdin(Stdio::null());
+    let rpc = profile.engine == "pi";
+    command.current_dir(folder.unwrap_or(&state)).stdin(if rpc { Stdio::piped() } else { Stdio::null() });
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     // Its own process group: cancelling stops the engine together with its
     // tool server and any tool it runs.
@@ -122,11 +125,21 @@ fn run(
         let _ = stderr.read_to_string(&mut text);
         text
     });
+    // pi in RPC mode: the request goes in as a command, and the input
+    // stays open for answers to its extensions' questions.
+    let mut input = child.stdin.take();
+    if let Some(stdin) = input.as_mut() {
+        let prompt = json!({ "id": "prompt", "type": "prompt", "message": user });
+        writeln!(stdin, "{prompt}").context("sending the request to pi")?;
+    }
     let mut activity = Activity::default();
     let mut shown = std::time::Instant::now();
     let mut steps = 0;
     for line in BufReader::new(child.stdout.take().expect("piped stdout")).lines() {
         let Ok(line) = line else { break };
+        if rpc && rpc_record(&line, &mut input, &mut activity) {
+            progress(&activity);
+        }
         if activity.line(&profile.engine, &line)
             && (shown.elapsed() >= Duration::from_millis(100) || activity.steps.len() != steps)
         {
@@ -190,9 +203,109 @@ fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Opt
     c
 }
 
-fn pi(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
+/// Handles what only pi's RPC mode sends: answers to commands, the end of
+/// the work, and questions from its extensions. Closing the input ends pi.
+/// Returns true after a question, so the overlay is drawn again.
+fn rpc_record(line: &str, input: &mut Option<std::process::ChildStdin>, activity: &mut Activity) -> bool {
+    let Ok(record) = serde_json::from_str::<Value>(line) else {
+        return false;
+    };
+    match record["type"].as_str() {
+        Some("response") if record["success"] == false => {
+            activity.error = Some(record["error"].as_str().unwrap_or("pi refused the request").to_string());
+            input.take();
+            false
+        }
+        // The prompt did not start any work (a command, for example).
+        Some("response") if record["command"] == "prompt" && record["data"]["disposition"] == "handled" => {
+            input.take();
+            false
+        }
+        // pi will not go on by itself: the request is done.
+        Some("agent_settled") => {
+            input.take();
+            false
+        }
+        Some("extension_ui_request") => {
+            let Some(answer) = dialog(&record) else { return false };
+            if let Some(stdin) = input.as_mut() {
+                let _ = writeln!(stdin, "{answer}");
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+/// pi-censor's options, as the overlay shows them. The answer is the
+/// option itself.
+const LABELS: [(&str, &str); 4] = [
+    ("Allow once", "Pozwól raz"),
+    ("Allow this exact call for this session", "Pozwól na to samo wywołanie do końca rozmowy"),
+    ("Deny", "Odmów"),
+    ("Show the whole call", "Pokaż całe wywołanie"),
+];
+
+/// Asks the user an extension's question in the overlay (select or
+/// confirm) and returns pi's `extension_ui_response`. Other dialogs (text
+/// input, an editor) are cancelled: the controller cannot type. Returns
+/// None for a record that wants no answer (a notice, a status).
+fn dialog(request: &Value) -> Option<Value> {
+    let id = request["id"].clone();
+    let cancelled = json!({ "type": "extension_ui_response", "id": id, "cancelled": true });
+    let method = request["method"].as_str().unwrap_or_default();
+    if !matches!(method, "select" | "confirm" | "input" | "editor") {
+        return None;
+    }
+    // A title like "pi-censor: why\n\nthe call": the first part is the
+    // question, the rest its details.
+    let title = request["title"].as_str().unwrap_or_default();
+    let (heading, rest) = title.split_once("\n\n").unwrap_or((title, ""));
+    let detail = [rest, request["message"].as_str().unwrap_or_default()]
+        .iter()
+        .filter(|t| !t.is_empty())
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut question = json!({ "kind": "question", "title": "Pytanie z pi", "tool": "",
+                               "description": heading, "command": detail });
+    match method {
+        "select" => {
+            let options: Vec<&str> = request["options"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+            if options.is_empty() || options.len() > crate::approvals::MAX_OPTIONS {
+                eprintln!("pi asked with {} options; cancelled", options.len());
+                return Some(cancelled);
+            }
+            let labels: Vec<&str> = options
+                .iter()
+                .map(|o| LABELS.iter().find(|(from, _)| from == o).map(|(_, to)| *to).unwrap_or(o))
+                .collect();
+            question["options"] = json!(labels);
+            let answer = crate::approvals::ask(&question.to_string(), || {});
+            let chosen = match (options.len(), answer.as_str()) {
+                (1, "yes") => Some(0),
+                (_, a) => a.strip_prefix("chose ").and_then(|a| a.split(':').next()?.parse::<usize>().ok()).map(|n| n - 1),
+            };
+            Some(match chosen.and_then(|i| options.get(i)) {
+                Some(option) => json!({ "type": "extension_ui_response", "id": id, "value": option }),
+                None => cancelled,
+            })
+        }
+        "confirm" => {
+            let yes = crate::approvals::ask(&question.to_string(), || {}) == "yes";
+            Some(json!({ "type": "extension_ui_response", "id": id, "confirmed": yes }))
+        }
+        _ => {
+            eprintln!("pi asked for text ({method}): cancelled");
+            Some(cancelled)
+        }
+    }
+}
+
+/// The request itself goes in later, as an RPC command (see run()).
+fn pi(profile: &Profile, system: &str, project: bool, tools: Option<&str>) -> Command {
     let mut c = Command::new("pi");
-    c.args(["-p", "--no-session", "--model", &profile.model, "--mode", "json"]);
+    c.args(["--mode", "rpc", "--no-session", "--model", &profile.model]);
     let extension = tools.and_then(|_| pi_extension());
     match (tools, extension, std::env::current_exe()) {
         // Only the Kuterlapa tools: no shell, no files. The extension
@@ -217,7 +330,6 @@ fn pi(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<
         c.args(["--no-context-files", "--system-prompt", system]);
     }
     c.args(["--thinking", profile.effort.as_deref().unwrap_or("off")]);
-    c.arg(user);
     c
 }
 

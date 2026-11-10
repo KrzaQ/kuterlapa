@@ -67,7 +67,11 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     let choice = question_only && options.len() >= 2;
     let mut overlay = json!({
         "visible": true,
-        "title": if question_only { "Pytanie modelu" } else { "Zgoda" },
+        "title": match text("title") {
+            t if !t.is_empty() => t,
+            _ if question_only => "Pytanie modelu".into(),
+            _ => "Zgoda".into(),
+        },
         "status": "Czekam na Twoją decyzję",
         "heading": if question_only { description.clone() } else { tool.replace('_', " ") },
         "text": if question_only { String::new() } else { description.clone() },
