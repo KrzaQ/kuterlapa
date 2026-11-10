@@ -69,7 +69,10 @@ function inPage(tab, code) {
 
 // Numbers the visible fields, buttons and links with a data attribute, so
 // fill and click find them again. Inside the page, as one expression.
+// Numbers from an earlier list go first: a hidden element that kept one
+// would otherwise be found instead of the visible one.
 const MARK = `(() => {
+  document.querySelectorAll("[data-kuterlapa]").forEach((el) => el.removeAttribute("data-kuterlapa"));
   const seen = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && st.visibility !== "hidden" && st.display !== "none"; };
   const label = (el) => (el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.placeholder ||
@@ -83,6 +86,17 @@ const MARK = `(() => {
     return "[" + (i + 1) + "] " + kind + " " + JSON.stringify(label(el)) +
       (el.value && el.tagName !== "BUTTON" && el.type !== "password" ? " = " + JSON.stringify(String(el.value).slice(0, 60)) : ""); }));
 })()`;
+
+// Finds element n of the last list, inside the page: the visible one, or
+// an error to return.
+const FIND = (n) => `
+  const seen = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const marked = [...document.querySelectorAll('[data-kuterlapa="${Number(n)}"]')];
+  const el = marked.find(seen);
+  if (!el) return marked.length ? "error: element ${Number(n)} is not visible any more; list the fields again"
+                                 : "error: no element ${Number(n)}; list the fields first";
+  const name = (el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.placeholder || el.name || "")
+    .replace(/\\s+/g, " ").trim().slice(0, 60);`;
 
 function run(argv) {
 	const [command, ...args] = argv;
@@ -160,19 +174,31 @@ function run(argv) {
 		case "fill": {
 			const [w, t, n, text, submit] = args;
 			const tab = tabAt(c, w, t);
-			const code = `(() => {
-  const el = document.querySelector('[data-kuterlapa="${Number(n)}"]');
-  if (!el) return "error: no element ${Number(n)}; list the fields first";
+			const code = `(() => {${FIND(n)}
   if (el.type === "password") return "error: Kuterlapa does not fill passwords";
+  if (["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"].includes(el.type) ||
+      ["BUTTON", "A"].includes(el.tagName))
+    return "error: element ${Number(n)} (" + (el.type || el.tagName.toLowerCase()) + " " + JSON.stringify(name) + ") takes no text; use chrome_click";
   el.focus();
   const text = ${JSON.stringify(text || "")};
   if (el.isContentEditable) { document.execCommand("selectAll"); document.execCommand("insertText", false, text); }
-  else {
-    // The native setter, so frameworks such as React notice the change.
-    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, "value").set.call(el, text);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+  else if (el.tagName === "SELECT") {
+    const option = [...el.options].find((o) => o.value === text || o.text.trim() === text);
+    if (!option) return "error: " + JSON.stringify(name) + " has no option " + JSON.stringify(text);
+    el.value = option.value;
     el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else {
+    // As if typed: select all and insert, which fires the events that
+    // frameworks listen to. If the page keeps the old text, the native
+    // setter, which React and others notice too.
+    el.select?.();
+    document.execCommand("insertText", false, text);
+    if (el.value !== text) {
+      const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value").set.call(el, text);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
   }
   if (${submit === "submit"}) {
     if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }
@@ -181,14 +207,29 @@ function run(argv) {
   return "ok";
 })()`;
 			const answer = inPage(tab, code);
-			return answer === "ok" ? `Filled ${n}${submit === "submit" ? " and sent the form" : ""}.` : answer;
+			if (answer !== "ok") return answer;
+			if (submit === "submit") return `Filled ${n} and sent the form.`;
+			// Read the field back a moment later: a page can change it again.
+			delay(0.4);
+			const shown = inPage(tab, `(() => {${FIND(n)}
+  const value = el.isContentEditable ? el.innerText : el.tagName === "SELECT" ? el.options[el.selectedIndex]?.text : el.value;
+  return JSON.stringify({ name, value: String(value ?? "") });
+})()`);
+			if (shown.startsWith("error")) return `Filled ${n}, but then: ${shown}`;
+			const { name, value } = JSON.parse(shown);
+			// Pages often add spaces (a phone number in groups): compare without them.
+			const bare = (x) => String(x || "").replace(/\s+/g, "");
+			if (bare(value) !== bare(text)) {
+				return `error: field ${n} (${JSON.stringify(name)}) shows ${JSON.stringify(value)}, not the text; the page did not take it or changed it`;
+			}
+			return `Filled ${n} (${JSON.stringify(name)}): it shows ${JSON.stringify(value)}.`;
 		}
 		case "click": {
 			const tab = tabAt(c, args[0], args[1]);
 			const n = Number(args[2]);
-			const answer = inPage(tab, `(() => { const el = document.querySelector('[data-kuterlapa="${n}"]');
-  if (!el) return "error: no element ${n}; list the fields first"; el.scrollIntoView({ block: "center" }); el.click(); return "ok"; })()`);
-			return answer === "ok" ? `Clicked ${n}.` : answer;
+			const answer = inPage(tab, `(() => {${FIND(n)}
+  el.scrollIntoView({ block: "center" }); el.click(); return "ok: " + JSON.stringify(name || el.innerText?.trim().slice(0, 60) || ""); })()`);
+			return answer.startsWith("ok") ? `Clicked ${n} ${answer.slice(4)}.` : answer;
 		}
 		default:
 			return "usage: chrome.js tabs | tab <w> <t> | close <w> <t>... | open <url> [profile] [new] | profiles | read <w> <t> [chars] | fields <w> <t> | fill <w> <t> <n> <text> [submit] | click <w> <t> <n>";
