@@ -267,12 +267,12 @@ impl Chat {
         let progress = |activity: &Activity| {
             self.state.lock().unwrap().activity = Some(activity.clone());
             self.show();
-            let mut work = activity.to_json(true);
+            let mut work = activity.to_json();
             work["profile"] = json!(profile.name);
             crate::view::work(Some(work));
         };
         // What the model did, saved with its answer.
-        let work = || self.state.lock().unwrap().activity.as_ref().map(|a| a.to_json(false).to_string());
+        let work = || self.state.lock().unwrap().activity.as_ref().map(|a| a.to_json().to_string());
         match mode {
             Mode::Conversation => {
                 let conversation = self.store.current_conversation(&session.name)?;
@@ -607,7 +607,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          narzędzia do sterowania urządzeniami i programami użytkownika. Działaj nimi, gdy użytkownik o \
          to prosi. Każdą czynność wykonuj raz; gdy się udała, nie powtarzaj jej i zakończ odpowiedzią. \
          Gdy potrzebujesz od użytkownika „tak” albo „nie”, zapytaj narzędziem ask_user (odpowiada \
-         przyciskami A i B). Nigdy nie pisz w odpowiedzi „A — …, B — …”: przyciski nie odpowiadają na \
+         przyciskami A i B). Gdy użytkownik ma wybrać jedną z kilku rzeczy, podaj je w ask_user jako \
+         options (2–6 krótkich nazw; wybiera padem); nigdy nie wpisuj możliwości do pytania tak/nie. \
+         Nigdy nie pisz w odpowiedzi „A — …, B — …”: przyciski nie odpowiadają na \
          tekst. Nigdy nie twierdź, że coś zrobiłeś, jeśli nie zrobiło tego narzędzie. Gdy nie masz \
          narzędzia do prośby, powiedz to wprost.",
     );
@@ -628,7 +630,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
     }
     p.push_str(
         "\n\nSesje: zmieniaj sesję (session_switch) tylko, gdy użytkownik wprost o to prosi, np. „przejdź do \
-         sesji X” albo „wejdź do iTerma, do sesji X”. Samo przejście do okna, karty czy aplikacji sesji nie \
+         sesji X” albo „wejdź do iTerma, do sesji X”, a X to nazwa jednej z sesji Kuterłapy. Słowo „sesja” \
+         często znaczy co innego: sesję tmuxa albo SSH, stronę, aukcję czy sprzedaż w sklepie. Wtedy nie \
+         zmieniaj sesji; w razie wątpliwości zapytaj. Samo przejście do okna, karty czy aplikacji sesji nie \
          zmienia: w trybie automatycznym zrobi to okno, gdy użytkownik zacznie mówić. Gdy użytkownik mówi, \
          że okno na wierzchu należy do jakiejś sesji, użyj session_bind ze stałym fragmentem tytułu (nazwa \
          arkusza, projektu, kanału; nie liczby powiadomień). „Wróć do poprzedniej sesji”: session_back. Nową sesję twórz \

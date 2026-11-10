@@ -150,9 +150,10 @@ impl Activity {
         }
     }
 
-    /// The work for the chat view: live (with the thinking) or, after the
-    /// answer, as it is saved with the answer (without it).
-    pub fn to_json(&self, thinking: bool) -> Value {
+    /// The work for the chat view, live and saved with the answer. The
+    /// latest thinking goes with it: it shows later why the model did
+    /// something.
+    pub fn to_json(&self) -> Value {
         let steps: Vec<Value> = self
             .steps
             .iter()
@@ -171,7 +172,7 @@ impl Activity {
             "seconds": self.finished.unwrap_or_else(|| self.started.elapsed()).as_secs_f64(),
             "steps": steps,
         });
-        if thinking {
+        if !self.thinking.trim().is_empty() {
             value["thinking"] = json!(self.thinking.trim());
         }
         value
