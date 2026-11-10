@@ -178,7 +178,8 @@ final class OverlayPanel {
         set(headingLabel, state["heading"])
         // Answers from a model are Markdown.
         let text = state["text"] as? String ?? ""
-        textLabel.attributedStringValue = Markdown.render(text, size: 15 * scale, color: .labelColor)
+        textLabel.attributedStringValue = Markdown.render(text, size: 15 * scale, color: .labelColor,
+                                                          width: width - 28)
         textLabel.isHidden = text.isEmpty
         setActivity(state["activity"] as? [[String: Any]] ?? [])
         set(detailLabel, state["detail"])
