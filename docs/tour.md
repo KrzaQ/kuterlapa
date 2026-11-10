@@ -65,6 +65,12 @@ pi runs in its RPC mode, so its extensions can ask too. When pi-censor is
 unsure of a tool call, its question (allow once, allow for the rest of
 the conversation, deny) shows the same way.
 
+The same goes for Claude Code running in tmux, here or on another host
+by SSH. `claude_ask` reads the question Claude Code waits on and shows it
+in the overlay: several questions one after another, ticking several
+options, permission prompts, and the final review. Kuterlapa then presses
+the keys in tmux.
+
 ### The help
 
 ![The help with the controller's buttons](screenshots/help.png)

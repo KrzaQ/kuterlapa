@@ -1,0 +1,8 @@
+description = "List the tmux panes on a host: target (session:window.pane), program and title. Panes that run Claude Code show the title of its session, and are marked when a question waits for an answer."
+command = ["python3", "./tmux.py", "panes", "{host}"]
+timeout = 40
+read_only = true
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+

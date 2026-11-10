@@ -1,0 +1,12 @@
+description = "Type text into a tmux pane on a host and press Enter: a message to the Claude Code that runs there, or a command line. Only what the user asked to send; never passwords."
+command = ["python3", "./tmux.py", "send", "{host}", "{pane}", "{text}"]
+timeout = 40
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+
+[params.pane]
+description = "The pane from tmux_panes, such as work:1.0"
+
+[params.text]
+description = "The text to type"

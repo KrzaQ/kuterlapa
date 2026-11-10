@@ -1,0 +1,15 @@
+description = "Read the last lines of a tmux pane on a host."
+command = ["python3", "./tmux.py", "read", "{host}", "{pane}", "{lines}"]
+timeout = 40
+read_only = true
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+
+[params.pane]
+description = "The pane from tmux_panes, such as work:1.0"
+
+[params.lines]
+type = "integer"
+description = "How many lines, default 40"
+required = false

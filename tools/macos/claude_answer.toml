@@ -1,0 +1,12 @@
+description = "Answer the question Claude Code waits on in a tmux pane, with the option numbers from claude_question: \"2\"; \"1,3\" when several may be ticked; \"submit\" or \"cancel\" on the review of answers. Only answer what the user decided; to let the user pick with the controller, use claude_ask."
+command = ["python3", "./tmux.py", "answer", "{host}", "{pane}", "{choice}"]
+timeout = 40
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+
+[params.pane]
+description = "The pane from tmux_panes, such as work:1.0"
+
+[params.choice]
+description = "Option numbers, or submit / cancel"

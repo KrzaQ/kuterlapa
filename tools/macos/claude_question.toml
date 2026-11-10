@@ -1,0 +1,11 @@
+description = "Read the question that Claude Code waits on in a tmux pane: a question with options (one, or several to tick), a permission prompt, the review of answers, or a menu. Answers with the options, numbered as Claude Code numbers them."
+command = ["python3", "./tmux.py", "question", "{host}", "{pane}"]
+timeout = 40
+read_only = true
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+
+[params.pane]
+description = "The pane from tmux_panes, such as work:1.0"
+

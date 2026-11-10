@@ -1,0 +1,10 @@
+description = "Show the questions that Claude Code waits on in a tmux pane in the user's overlay, one by one, and answer them as the user picks with the controller (several questions, ticking several options, permission prompts and the final review included). Use it when the user wants to answer Claude Code's question."
+command = ["python3", "./tmux.py", "ask", "{host}", "{pane}"]
+timeout = 900
+
+[params.host]
+description = "An SSH host alias the user has, such as devbox, or \"local\" for this Mac"
+
+[params.pane]
+description = "The pane from tmux_panes, such as work:1.0"
+
