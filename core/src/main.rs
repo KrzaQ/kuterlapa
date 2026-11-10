@@ -71,7 +71,9 @@ fn main() -> Result<()> {
         "status" => "status".to_string(),
         _ => bail!(USAGE),
     };
-    let answer = socket::request(&paths::core_socket(), &request)?;
+    // "ask" answers when the model has finished, which can take minutes.
+    let wait = if command == "ask" { 600 } else { 30 };
+    let answer = socket::request_waiting(&paths::core_socket(), &request, std::time::Duration::from_secs(wait))?;
     println!("{answer}");
     if answer.starts_with("error") {
         std::process::exit(1);
