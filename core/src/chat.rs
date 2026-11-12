@@ -17,7 +17,8 @@
 //! While a command's answer is on screen, the next command continues it
 //! as a thread. Closing the answer, or a long pause, starts a new thread.
 
-use crate::activity::{self, Activity, StepState};
+use crate::usage::tokens;
+use lejce::activity::{self, Activity, StepState};
 use crate::hooks::{self, Flag};
 use crate::memory;
 use crate::profiles::Current;
@@ -746,11 +747,11 @@ fn context_line(a: &Activity) -> Option<String> {
     Some(match a.window.filter(|&w| w > 0) {
         Some(window) => format!(
             "kontekst {}/{} ({}%)",
-            activity::tokens(a.context),
-            activity::tokens(window),
+            tokens(a.context),
+            tokens(window),
             (a.context * 100 + window / 2) / window
         ),
-        None => format!("kontekst {}", activity::tokens(a.context)),
+        None => format!("kontekst {}", tokens(a.context)),
     })
 }
 
@@ -777,7 +778,7 @@ fn limits_line(a: &Activity) -> Option<String> {
 }
 
 fn token_line(a: &Activity) -> String {
-    format!("tokeny: {} wej. · {} wyj.", activity::tokens(a.input), activity::tokens(a.output()))
+    format!("tokeny: {} wej. · {} wyj.", tokens(a.input), tokens(a.output()))
 }
 
 /// "1 narzędzie", "3 narzędzia", "5 narzędzi".

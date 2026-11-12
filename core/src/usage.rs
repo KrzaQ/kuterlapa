@@ -1,12 +1,12 @@
 //! Token statistics: how much each model used, kept in the `usage` table.
-//! The engines report each model's use in a request (activity.rs); this
+//! The engines report each model's use in a request (Lejce reads it); this
 //! module saves it and sums it up for `kuterlapa stats`, the `usage_stats`
 //! tool and the overlay panel.
 
-use crate::activity::{tokens, Call};
 use crate::profiles::Profile;
 use crate::store::{Store, UsageRow, UsageSum};
 use anyhow::{bail, Result};
+use lejce::Call;
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
 
@@ -23,13 +23,23 @@ pub fn record(profile: &Profile, session: &str, purpose: &str, calls: &[Call]) {
     let Some(store) = STORE.get() else { return };
     for call in calls {
         // A failed answer that used nothing says nothing.
-        if call.input + call.cache_read + call.cache_write + call.output == 0 {
+        if call.is_empty() {
             continue;
         }
         let row = UsageRow { session, profile: &profile.name, purpose, engine: &profile.engine, call };
         if let Err(e) = store.add_usage(&row) {
             eprintln!("usage: {e:#}");
         }
+    }
+}
+
+/// A token count for people: 537, 4,2k, 19,8k, 1,2M.
+pub fn tokens(n: u64) -> String {
+    match n {
+        0..=999 => n.to_string(),
+        1_000..=99_999 => format!("{:.1}k", n as f64 / 1000.0).replace('.', ","),
+        100_000..=999_999 => format!("{}k", n / 1000),
+        _ => format!("{:.1}M", n as f64 / 1_000_000.0).replace(".0M", "M").replace('.', ","),
     }
 }
 
@@ -225,6 +235,15 @@ pub fn run(args: &[String]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn token_counts() {
+        assert_eq!(tokens(537), "537");
+        assert_eq!(tokens(19_810), "19,8k");
+        assert_eq!(tokens(250_000), "250k");
+        assert_eq!(tokens(1_000_000), "1M");
+        assert_eq!(tokens(1_200_000), "1,2M");
+    }
 
     #[test]
     fn text_groups_and_numbers() {

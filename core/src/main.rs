@@ -19,7 +19,6 @@
 //!   kuterlapa key <combo>       press a key combination
 //!   kuterlapa status            show the state of the running parts
 
-mod activity;
 mod approvals;
 mod chat;
 mod computer;

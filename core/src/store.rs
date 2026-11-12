@@ -341,7 +341,7 @@ pub struct UsageRow<'a> {
     pub profile: &'a str,
     pub purpose: &'a str,
     pub engine: &'a str,
-    pub call: &'a crate::activity::Call,
+    pub call: &'a lejce::Call,
 }
 
 /// The sums of one group (purpose, role, provider, model) in a period.
