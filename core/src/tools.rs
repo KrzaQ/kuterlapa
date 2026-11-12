@@ -26,7 +26,9 @@
 //!   required = true      # default true
 //!
 //! "{name}" in the command becomes the parameter's value. An argument that
-//! names an optional parameter the model left out is dropped.
+//! names an optional parameter the model left out is dropped, except a bare
+//! "{name}" with arguments after it: that one becomes "", so the arguments
+//! after it keep their places.
 //! The program never runs through a shell, so a value cannot inject
 //! commands.
 
@@ -166,13 +168,17 @@ impl Tool {
             Value::String(s) => s.clone(),
             other => other.to_string(),
         };
-        let mut argv = Vec::new();
+        // None: a left-out optional parameter, alone in its argument.
+        let mut argv: Vec<Option<String>> = Vec::new();
         for (i, arg) in self.command.iter().enumerate() {
             let missing = self
                 .params
                 .keys()
-                .any(|name| !arguments.contains_key(name) && arg.contains(&format!("{{{name}}}")));
-            if missing {
+                .find(|name| !arguments.contains_key(*name) && arg.contains(&format!("{{{name}}}")));
+            if let Some(name) = missing {
+                if *arg == format!("{{{name}}}") {
+                    argv.push(None);
+                }
                 continue;
             }
             let mut filled = arg.clone();
@@ -182,9 +188,14 @@ impl Tool {
             if i == 0 || filled.starts_with("~/") {
                 filled = paths::expand(&filled).to_string_lossy().into_owned();
             }
-            argv.push(filled);
+            argv.push(Some(filled));
         }
-        Ok(argv)
+        // Left out at the end: dropped. In the middle: empty, so that a
+        // script's later positional arguments do not move up.
+        while argv.last() == Some(&None) {
+            argv.pop();
+        }
+        Ok(argv.into_iter().map(Option::unwrap_or_default).collect())
     }
 
     /// Runs the tool. Returns its output and whether it succeeded.
@@ -275,6 +286,25 @@ mod tests {
         let args = json!({ "speed": 2 });
         let argv = tool().argv(args.as_object().unwrap()).unwrap();
         assert_eq!(argv, ["/bin/echo", "speed", "2"]);
+    }
+
+    #[test]
+    fn keeps_places_of_later_arguments() {
+        let mut tool: Tool = toml::from_str(
+            r#"
+            description = "test"
+            command = ["/bin/echo", "{target}", "{text}", "{seconds}"]
+            [params.target]
+            required = false
+            [params.text]
+            [params.seconds]
+            required = false
+            "#,
+        )
+        .unwrap();
+        tool.name = "t".into();
+        let args = json!({ "text": "ls" });
+        assert_eq!(tool.argv(args.as_object().unwrap()).unwrap(), ["/bin/echo", "", "ls"]);
     }
 
     #[test]
