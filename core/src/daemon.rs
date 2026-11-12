@@ -403,6 +403,11 @@ fn act(state: &Arc<State>, button: &str) -> String {
             send_chat(state);
             "ok".into()
         }
+        // While the overlay shows something (a panel, an answer, the model at
+        // work) or the chat view is open, A stays with Kuterlapa: it must not
+        // press Enter in the window under it.
+        Action::FinishDictation { .. } if hide_help(state) => "ok".into(),
+        Action::FinishDictation { .. } if state.chat.active() || view::is_open() => "ok".into(),
         Action::EraseDictation { fallback } => {
             speech::send("cancel");
             let count = std::mem::take(&mut *state.dictated.lock().unwrap()).chars().count();
