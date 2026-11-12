@@ -1,4 +1,4 @@
-description = "Change tmux: split the pane side by side (a vertical line, split-side) or one below the other (a horizontal line, split-below), go to the pane above, below, left or right, zoom a pane, open a new window, go to the next, previous or a given window, or list the windows. Without host it acts on the tmux session in iTerm's front tab. Answers the pane in use and the session's windows."
+description = "Change tmux in the session the user sees: split the pane side by side (a vertical line, split-side) or one below the other (a horizontal line, split-below), go to the pane above, below, left or right (\"panel w prawo\" is pane-right), zoom a pane, open a new window, go to the next or previous window (\"okno w prawo / w lewo\" is window-next / window-previous) or to a given one, or list the windows. Without host it acts on the tmux session in iTerm's front tab, which is what the user means by \"this tmux\". Never type tmux commands into iTerm: use this. Answers the pane in use and the session's windows."
 command = ["python3", "./tmux.py", "do", "action={action}", "host={host}", "pane={pane}", "target={target}"]
 timeout = 40
 

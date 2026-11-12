@@ -1,4 +1,4 @@
-description = "List the tmux panes on a host: target (session:window.pane), program and title. Panes that run Claude Code show the title of its session, and are marked when a question waits for an answer."
+description = "List the tmux panes on a host: target (session:window.pane), program and title. Panes that run Claude Code show the title of its session, and are marked when a question waits for an answer. The pane in iTerm's front tab, the one the user sees, is marked IN ITERM'S FRONT TAB."
 command = ["python3", "./tmux.py", "panes", "{host}"]
 timeout = 40
 read_only = true

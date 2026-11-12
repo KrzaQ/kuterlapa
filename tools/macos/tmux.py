@@ -18,6 +18,9 @@
     tmux.py ask-front                     the same for the Claude Code in
                                           iTerm's front tab (a controller
                                           button, without a model)
+    tmux.py attach <host> <session>       open a tmux session in iTerm, so the
+                                          user sees it: its tab if one shows
+                                          it, else a new tab
     tmux.py do action=<a> [host=<h>] [pane=<p>] [target=<t>]
                                           change tmux: split, go to another
                                           pane or window, open a window;
@@ -89,6 +92,13 @@ def panes(host: str) -> str:
             f"| grep -qE '{footer}|Submit answers' && echo {shlex.quote(t)}"
             for t in claude) + "; true"
         waiting = set(tmux(host, script=script).split())
+    # The pane the user sees: the one in iTerm's front tab, if that tab
+    # shows this host's tmux.
+    try:
+        front_host, front_pane = front()
+        seen = front_pane if same_host(front_host, host) else None
+    except (Fail, OSError, subprocess.TimeoutExpired, ValueError):
+        seen = None
     out = []
     for target, command, title in rows:
         kind = "Claude Code" if target in claude else command
@@ -96,8 +106,15 @@ def panes(host: str) -> str:
         # tmux has cleaned it).
         title = re.sub(r"^[_✳⠂⠐*·]\s+", "", title)
         mark = " | WAITS FOR AN ANSWER" if target in waiting else ""
+        if target == seen:
+            mark += " | IN ITERM'S FRONT TAB"
         out.append(f"{target} | {kind} | {title}{mark}")
     return "\n".join(out)
+
+
+def same_host(a: str, b: str) -> bool:
+    here = ("", "local", "localhost")
+    return a == b or (a in here and b in here)
 
 
 def question(lines: list[str]) -> dict | None:
@@ -424,6 +441,41 @@ def do(action: str, host: str | None, pane: str | None, target: str | None) -> s
     return f"Done: {action} in {session} on {at}. Now in pane {current} ({command}).\n" + "\n".join(lines)
 
 
+TABS = """const it = Application("iTerm2");
+const out = [];
+it.windows().forEach((w, i) => w.tabs().forEach((t, j) => {
+  const s = t.currentSession();
+  let command = "";
+  try { command = s.variable({ named: "commandLine" }) || ""; } catch (e) {}
+  out.push({ window: i + 1, tab: j + 1, name: s.name(), command });
+}));
+JSON.stringify(out);"""
+
+
+def attach(host: str, session: str) -> str:
+    """The session in iTerm: go to a tab that shows it, or open one."""
+    tmux(host, "has-session", "-t", session)
+    here = os.path.dirname(os.path.abspath(__file__))
+    iterm = ["osascript", "-l", "JavaScript", os.path.join(here, "iterm.js")]
+    listing = subprocess.run(["osascript", "-l", "JavaScript", "-e", TABS], capture_output=True, text=True, timeout=15)
+    tabs = json.loads(listing.stdout) if listing.returncode == 0 and listing.stdout.strip() else []
+    remote = host not in ("", "local", "localhost")
+    for t in tabs:
+        # tmux names the tab after its session: "work (ssh)" or "work (tmux)".
+        name = re.sub(r"\s*\((ssh|tmux)\)$", "", t["name"]).strip()
+        words = t["command"].split()
+        on_host = (words[:1] == ["ssh"] and host in words) if remote else not (words[:1] == ["ssh"])
+        if name == session and on_host:
+            subprocess.run(iterm + ["tab", str(t["window"]), str(t["tab"])], capture_output=True, text=True, timeout=15)
+            return f"Went to iTerm tab {t['window']}.{t['tab']}, which shows the tmux session {session}."
+    command = f"ssh -t {shlex.quote(host)} tmux attach -t {shlex.quote(session)}" if remote \
+        else f"tmux attach -t {shlex.quote(session)}"
+    done = subprocess.run(iterm + ["new", command], capture_output=True, text=True, timeout=15)
+    if done.returncode != 0:
+        raise Fail(f"iTerm did not open a tab: {(done.stderr or done.stdout).strip()}")
+    return f"Opened the tmux session {session}{' on ' + host if remote else ''} in a new iTerm tab ({command})."
+
+
 def send(host: str, pane: str, text: str) -> str:
     tmux(host, "send-keys", "-t", pane, "-l", "--", text)
     time.sleep(0.2)
@@ -448,6 +500,8 @@ def main(argv: list[str]) -> int:
             print(ask(argv[1], argv[2]))
         elif argv and argv[0] == "ask-front":
             print(ask_front())
+        elif len(argv) >= 3 and argv[0] == "attach":
+            print(attach(argv[1], argv[2]))
         elif argv and argv[0] == "do":
             named = dict(a.split("=", 1) for a in argv[1:] if "=" in a)
             print(do(named.get("action", ""), named.get("host") or None, named.get("pane") or None, named.get("target") or None))
