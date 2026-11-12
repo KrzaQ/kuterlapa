@@ -149,7 +149,14 @@ enum Desktops {
             Keystrokes.press(combo)
             usleep(400_000)  // the slide animation
         }
-        return "ok"
+        // The keys may do nothing (a shortcut turned off, another app took
+        // them): say so, instead of letting the model report a change that
+        // did not happen.
+        for _ in 0..<5 {
+            if desktops().current == to { return "ok" }
+            usleep(200_000)
+        }
+        return "error: still on desktop \(desktops().current), not \(to). Check that ctrl+arrow switches desktops (System Settings, Keyboard, Shortcuts, Mission Control)."
     }
 
     /// Brings window `number` from the last list to the front: goes to its

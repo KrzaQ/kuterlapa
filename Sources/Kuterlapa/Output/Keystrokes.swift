@@ -19,9 +19,18 @@ struct KeyCombo: Equatable {
             }
         }
         guard let code else { return nil }
+        // A real keyboard marks the arrow keys as function keys on the
+        // numeric pad. System shortcuts are stored with those flags (ctrl+
+        // arrow to switch desktops is ctrl+fn+arrow), so a key event
+        // without them never matches the shortcut.
+        if Self.arrows.contains(code) {
+            flags.formUnion([.maskSecondaryFn, .maskNumericPad])
+        }
         self.code = code
         self.flags = flags
     }
+
+    static let arrows: Set<CGKeyCode> = [0x7B, 0x7C, 0x7D, 0x7E]
 
     static let modifiers: [String: CGEventFlags] = [
         "cmd": .maskCommand, "command": .maskCommand,
