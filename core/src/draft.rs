@@ -26,7 +26,14 @@ const EDIT_PROMPT: &str = "Edytujesz szkic tekstu. Użytkownik dyktuje go głose
 aplikacji. Dostajesz obecny szkic i nową wypowiedź użytkownika. Wypowiedź jest albo poleceniem \
 edycji (na przykład „zamień X na Y”, „krócej”, „zrób z tego listę”, „przetłumacz na angielski”), \
 albo dalszym tekstem do dopisania na końcu. Rozpoznanie mowy bywa niedokładne: popraw oczywiste \
-pomyłki. Zwróć wyłącznie nowy, pełny szkic: bez komentarzy, bez cudzysłowów, bez bloków kodu.";
+pomyłki. Dostajesz też wcześniejsze polecenia do tego szkicu: nowa wypowiedź często poprawia to, \
+co z nimi poszło źle („nie, nie”, „cały czas gubisz…”), więc czytaj ją razem z nimi. \
+Użytkownik często literuje. Rozpoznanie zapisuje polskie nazwy liter po swojemu: „ka”, „ky” to k; \
+„er”, „ry” to r; „te”, „ty” to t; „ce”, „cy” to c; „em”, „my” to m; „en” to n; „ef” to f; „es” to s; \
+„el” to l; „be”, „by” to b; „de”, „dy” to d; „pe”, „py” to p; „we” to w; „zet” to z; „ha” to h; \
+„jot” to j; „igrek” to y. „K jak Katarzyna” to k. Myślniki między literami tylko je rozdzielają. \
+W adresach e-mail i stron: „małpa” to @, „kropka” to ., „podkreślnik” to _, „myślnik” to -; \
+bez spacji. Zwróć wyłącznie nowy, pełny szkic: bez komentarzy, bez cudzysłowów, bez bloków kodu.";
 
 #[derive(Default)]
 struct State {
@@ -45,7 +52,16 @@ struct State {
     last_edit: Option<(String, String, String)>,
     /// Bumped on every profile change, so only the last one takes over.
     takeover: u64,
+    /// What the user said to this draft, oldest first: the first dictation,
+    /// then each instruction a model applied. The model sees it, and so
+    /// does the user, under the draft.
+    history: Vec<String>,
+    /// The instruction the model works on now.
+    working_on: Option<String>,
 }
+
+/// How many earlier instructions the overlay shows under the draft.
+const SHOWN_HISTORY: usize = 4;
 
 /// Wait after a profile change before the new model redoes the edit: the
 /// user may press the profile button a few times.
@@ -122,6 +138,7 @@ impl Draft {
                 return;
             }
             if s.text.is_empty() {
+                s.history = vec![format!("(pierwsze dyktowanie) {pending}")];
                 s.text = pending;
                 s.last_edit = None;
                 drop(s);
@@ -139,14 +156,27 @@ impl Draft {
     /// the draft. Remembers the edit, so another model can redo it.
     fn edit(&self, before: String, instruction: String) {
         let profile = self.profile();
-        let user = format!("Szkic:\n<<<\n{before}\n>>>\n\nWypowiedź użytkownika:\n<<<\n{instruction}\n>>>");
+        let earlier = {
+            let mut s = self.state.lock().unwrap();
+            s.working_on = Some(instruction.clone());
+            s.history.iter().enumerate().map(|(i, h)| format!("{}. {h}", i + 1)).collect::<Vec<_>>().join("\n")
+        };
+        self.show();
+        let earlier = if earlier.is_empty() {
+            String::new()
+        } else {
+            format!("Wcześniejsze polecenia do tego szkicu, od najstarszego (już wykonane):\n{earlier}\n\n")
+        };
+        let user = format!("Szkic:\n<<<\n{before}\n>>>\n\n{earlier}Nowa wypowiedź użytkownika:\n<<<\n{instruction}\n>>>");
         let result = engines::complete(&profile, EDIT_PROMPT, &user);
         {
             let mut s = self.state.lock().unwrap();
             s.busy = false;
+            s.working_on = None;
             match result {
                 Ok(text) if !text.is_empty() => {
                     s.text = text;
+                    s.history.push(instruction.clone());
                     s.last_edit = Some((before, instruction, profile.name.clone()));
                 }
                 Ok(_) => s.error = Some("model zwrócił pusty tekst".into()),
@@ -173,6 +203,7 @@ impl Draft {
             if s.busy {
                 return "ok".into();
             }
+            s.history.clear();
             std::mem::take(&mut s.text)
         };
         self.hide();
@@ -239,6 +270,10 @@ impl Draft {
                 match (takeover, &s.last_edit) {
                     (Some(n), Some((before, instruction, _))) if s.takeover == n && !s.busy && !s.recording => {
                         let job = (before.clone(), instruction.clone());
+                        // It is done again, not once more.
+                        if s.history.last() == Some(instruction) {
+                            s.history.pop();
+                        }
                         s.busy = true;
                         Some(job)
                     }
@@ -295,7 +330,10 @@ impl Draft {
         } else if s.recording {
             "Słucham…".to_string()
         } else if s.busy {
-            format!("{profile} poprawia szkic…")
+            match &s.working_on {
+                Some(instruction) => format!("{profile} poprawia szkic: „{}”", short(instruction, 120)),
+                None => format!("{profile} poprawia szkic…"),
+            }
         } else if let Some(e) = &s.error {
             format!("Błąd: {e}")
         } else {
@@ -313,10 +351,31 @@ impl Draft {
         } else {
             "X: popraw głosem · A: wyślij · B: odrzuć"
         };
-        let state = json!({
+        let mut state = json!({
             "visible": true, "title": format!("Szkic · {profile}"), "status": status, "text": text, "hint": hint,
         });
+        // What the user said so far, small under the draft: the latest
+        // instructions, numbered.
+        if s.history.len() > 1 {
+            let from = s.history.len().saturating_sub(SHOWN_HISTORY);
+            let mut lines: Vec<String> =
+                s.history[from..].iter().enumerate().map(|(i, h)| format!("{}. {}", from + i + 1, short(h, 90))).collect();
+            if from > 0 {
+                lines.insert(0, format!("… i {from} wcześniej"));
+            }
+            state["detail"] = json!(format!("Polecenia:\n{}", lines.join("\n")));
+        }
         drop(s);
         shell::overlay(&state);
+    }
+}
+
+/// `text` in one line, at most `count` characters.
+fn short(text: &str, count: usize) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if line.chars().count() > count {
+        format!("{}…", line.chars().take(count - 1).collect::<String>())
+    } else {
+        line
     }
 }
