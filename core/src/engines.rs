@@ -82,6 +82,7 @@ fn run(
         tools: tools.and_then(|set| tool_list(profile, engine, set)),
         // One message per engine: the program sends the history itself.
         session: Session::None,
+        disable_hooks: false,
         files: state,
     };
     let ask = |question: &Question| ask(engine, question);
