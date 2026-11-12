@@ -314,9 +314,10 @@ impl Chat {
             s.recording = false;
             s.countdown = None;
             s.pending.clear();
-            if s.answer.is_empty() && s.error.is_none() {
-                s.visible = false;
-            }
+            // Cancelling closes the overlay. Going back to the last answer
+            // looked like the old exchange flashing up; recall (ZR) still
+            // shows it.
+            s.visible = false;
         } else {
             voice::send("stop");
             let mut s = self.state.lock().unwrap();
