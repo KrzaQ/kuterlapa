@@ -32,6 +32,14 @@ pub fn run(args: &[String]) -> Result<()> {
     let session = args.iter().position(|a| a == "--session").and_then(|i| args.get(i + 1)).cloned();
     // Private tools only for a model on the user's own machines.
     let local = args.iter().any(|a| a == "--local");
+    // "--only a,b": just these tools (the draft's model reads, it does not
+    // act).
+    let only: Option<Vec<String>> = args
+        .iter()
+        .position(|a| a == "--only")
+        .and_then(|i| args.get(i + 1))
+        .map(|list| list.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect());
+    let allowed = |name: &str| only.as_ref().is_none_or(|names| names.iter().any(|n| n == name));
     let tools: Vec<Tool> = tools::load(session.as_deref()).into_iter().filter(|t| local || !t.private).collect();
     // Actions already done in this request (one engine run), by tool and
     // arguments: see `call`.
@@ -87,6 +95,18 @@ pub fn run(args: &[String]) -> Result<()> {
                 list.extend(memory_schemas());
                 list.extend(session_schemas());
                 list.push(json!({
+                    "name": "spell_decode",
+                    "description": "Turn spelled speech back into letters. Speech recognition writes the names of \
+                                    spelled letters, often changed: in Polish \"K-o-ty-e-ky\" is kotek. \
+                                    Give the spelled part as you got it; the answer is a best guess and the parts \
+                                    that are not letter names. Use it whenever the user spells a name, an address \
+                                    or a code letter by letter.",
+                    "inputSchema": { "type": "object", "properties": {
+                        "text": { "type": "string", "description": "The spelled part, as recognized" },
+                        "language": { "type": "string", "description": "Two-letter code; default: the speech language" },
+                    }, "required": ["text"] },
+                }));
+                list.push(json!({
                     "name": "usage_stats",
                     "description": "How many tokens the models used through Kuterlapa, per model: answers, \
                                     draft corrections and pi-censor's classifier, with cache reads and \
@@ -107,7 +127,11 @@ pub fn run(args: &[String]) -> Result<()> {
                     "inputSchema": { "type": "object", "properties": {} },
                 }));
                 annotate(&mut list);
+                list.retain(|t| allowed(t["name"].as_str().unwrap_or_default()));
                 Ok(json!({ "tools": list }))
+            }
+            "tools/call" if !allowed(params.get("name").and_then(Value::as_str).unwrap_or_default()) => {
+                Ok(result("This tool is not available here.".into(), false))
             }
             "tools/call" => Ok(call(&tools, &params, session.as_deref().unwrap_or("general"), &mut done)),
             other => Err((-32601, format!("unknown method {other}"))),
@@ -264,6 +288,19 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
         };
         return result(text, ok);
     }
+    if name == "spell_decode" {
+        let text = arguments.get("text").and_then(Value::as_str).unwrap_or_default();
+        let language = arguments
+            .get("language")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(crate::spell::speech_language);
+        let (text, ok) = match crate::spell::decode(text, &language) {
+            Ok(decoded) => (crate::spell::describe(&decoded, &language), true),
+            Err(e) => (format!("error: {e:#}"), false),
+        };
+        return result(text, ok);
+    }
     if name == "usage_stats" {
         let (text, ok) = match usage_stats(arguments) {
             Ok(text) => (text, true),
@@ -317,7 +354,7 @@ fn result(text: String, ok: bool) -> Value {
 /// none yet: which only read, and which delete. Tools from files and the
 /// computer tools set their own.
 fn annotate(list: &mut [Value]) {
-    const READ_ONLY: &[&str] = &["memory_read", "memory_search", "session_list", "kuterlapa_help", "usage_stats"];
+    const READ_ONLY: &[&str] = &["memory_read", "memory_search", "session_list", "kuterlapa_help", "usage_stats", "spell_decode"];
     const DESTRUCTIVE: &[&str] = &["memory_forget", "session_delete"];
     for tool in list.iter_mut() {
         if tool.get("annotations").is_some() {
