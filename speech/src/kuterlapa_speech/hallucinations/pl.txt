@@ -1,0 +1,7 @@
+# Phrases Whisper invents on silence or noise in Polish; it learned them
+# from video subtitles. A short piece that starts with one is dropped.
+dzięki za oglądanie
+dziękuję za uwagę
+napisy
+subskrybuj
+zapraszam na

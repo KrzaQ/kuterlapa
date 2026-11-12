@@ -4,6 +4,10 @@ Files follow the XDG base directory layout:
     ~/.config/kuterlapa/speech.toml        settings (all optional)
     ~/.config/kuterlapa/dictionary.txt     words for Whisper's context
     ~/.config/kuterlapa/replacements.txt   fixes applied after recognition
+    ~/.config/kuterlapa/sessions/<name>/   a session's own dictionary.txt and
+                                           replacements.txt, used first
+    ~/.config/kuterlapa/hallucinations/    <language>.txt: more phrases that
+                                           Whisper invents on silence
     ~/.local/share/kuterlapa/recordings/   recordings and their text
     ~/.local/state/kuterlapa/              sockets
 """
@@ -35,10 +39,12 @@ class Settings:
     # A model id or a local folder with a model for the backend. Empty:
     # the backend's default (Whisper large-v3-turbo).
     model: str = ""
-    language: str = "pl"
-    # The first sentence of Whisper's context. It tells Whisper the
-    # language and style of the speech.
-    prompt_intro: str = "Rozmawiamy po polsku z angielskimi terminami IT."
+    # The language of the speech (ISO 639-1, such as "pl"). Empty: Whisper
+    # detects it in each piece.
+    language: str = ""
+    # The first sentence of Whisper's context: the language and style of
+    # the speech, written in that language. Empty: none.
+    prompt_intro: str = ""
     # Input device name; empty means the system default.
     microphone: str = ""
     # Close the microphone after this many seconds without a recording, so

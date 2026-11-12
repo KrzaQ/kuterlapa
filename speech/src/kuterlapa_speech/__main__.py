@@ -109,6 +109,18 @@ def session_dictionaries(settings):
     return list(settings.dictionaries)
 
 
+def session_replacements(settings):
+    """The current session's fixes first, then the global ones."""
+    try:
+        session = (config.STATE / "session").read_text(encoding="utf-8").strip()
+    except OSError:
+        session = ""
+    own = config.CONFIG / "sessions" / session / "replacements.txt" if session else None
+    if own is not None and own.is_file():
+        return [str(own), settings.replacements]
+    return [settings.replacements]
+
+
 def speech_context():
     """What the user is likely to talk about: the core writes the window in
     front, the last messages and the session's description to the state
@@ -332,12 +344,12 @@ class Dictation:
             prompt = build_prompt(s.prompt_intro, self.dictionaries, self.last_text, self.context)
             t = time.time()
             try:
-                raw = self.backend.transcribe(piece, s.language, prompt)
+                raw = self.backend.transcribe(piece, s.language or None, prompt)
             except Exception as e:  # keep the provider alive on a bad piece
                 log(f"transcription failed: {e}")
                 play(s.sound_error)
                 continue
-            text = clean(raw, s.replacements)
+            text = clean(raw, session_replacements(s), s.language)
             log(f"{len(piece) / RATE:.1f}s audio, {time.time() - t:.2f}s: {raw}")
             if text != raw:
                 log(f"  cleaned: {text}")

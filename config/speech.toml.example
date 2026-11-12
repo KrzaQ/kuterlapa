@@ -10,11 +10,15 @@ backend = ""
 # backend's default, Whisper large-v3-turbo.
 model = ""
 
-# Language of the speech (ISO 639-1 code).
-language = "pl"
+# Language of the speech (ISO 639-1 code). Empty: Whisper detects it in
+# each piece. Setting it is faster and more exact, for example:
+#   language = "pl"
+language = ""
 
-# First sentence of Whisper's context: the language and style of the speech.
-prompt_intro = "Rozmawiamy po polsku z angielskimi terminami IT."
+# First sentence of Whisper's context: the language and style of the
+# speech, written in that language. Empty: none. For example:
+#   prompt_intro = "Rozmawiamy po polsku z angielskimi terminami IT."
+prompt_intro = ""
 
 # Input device name; empty means the system default.
 microphone = ""
@@ -38,6 +42,12 @@ dictionaries = ["~/.config/kuterlapa/dictionary.txt"]
 
 # Fixes applied after recognition, one "wrong => right" per line.
 replacements = "~/.config/kuterlapa/replacements.txt"
+
+# A session's own word list and fixes, in its folder
+# (~/.config/kuterlapa/sessions/<name>/dictionary.txt and replacements.txt),
+# come before these. Phrases that Whisper invents on silence are built in
+# for some languages; add your own in
+# ~/.config/kuterlapa/hallucinations/<language>.txt.
 
 # Where recordings and their text are saved.
 recordings = "~/.local/share/kuterlapa/recordings"

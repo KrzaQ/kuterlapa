@@ -116,10 +116,16 @@ All in `~/.config/kuterlapa/`:
   (erase the text of the last dictation, or press Escape),
   `"finish-dictation|Return"` (end the dictation, wait for its last words,
   then press Enter), or `"cmd:<shell command>"`. The app reads the file again when it changes.
-- `speech.toml`: Whisper model, language, context, microphone.
+- `speech.toml`: Whisper model, language (empty: Whisper detects it),
+  the first sentence of its context, microphone. The example shows Polish
+  settings.
 - `dictionary.txt`: words that Whisper should recognize (project and host
   names, tools). Most important first; Whisper reads about 200 tokens.
 - `replacements.txt`: fixes after recognition, `wrong => right`.
+- A session can have its own `dictionary.txt` and `replacements.txt` in
+  `sessions/<name>/`; they come before the global ones.
+- `hallucinations/<language>.txt`: more phrases that Whisper invents on
+  silence (built in: Polish and English).
 
 ## License
 

@@ -1,0 +1,6 @@
+# Phrases Whisper invents on silence or noise in English; it learned them
+# from video subtitles. A short piece that starts with one is dropped.
+thanks for watching
+thank you
+subtitles by
+please subscribe

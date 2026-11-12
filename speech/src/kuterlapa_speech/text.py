@@ -3,17 +3,32 @@
 import re
 from pathlib import Path
 
+from .config import CONFIG
+
 PROMPT_CHARS = 600  # Whisper reads about 224 tokens; this is about 200
 LAST_TEXT_CHARS = 150
 MAX_REPEATS = 4  # a word repeated more often in a row means a hallucination
 
-# Phrases Whisper invents on silence or noise; it learned them from video
-# subtitles. A piece that is only one of these is dropped.
-HALLUCINATIONS = re.compile(
-    r"^\W*(dzięki za oglądanie|dziękuję za uwagę|napisy|subskrybuj|"
-    r"zapraszam na|thanks for watching|thank you)\b.*$",
-    re.IGNORECASE,
-)
+# Phrases Whisper invents on silence or noise, learned from video
+# subtitles: a file for each language next to this one (hallucinations/),
+# and the user's own in ~/.config/kuterlapa/hallucinations/<language>.txt.
+BUILT_IN = Path(__file__).parent / "hallucinations"
+USER_PHRASES = CONFIG / "hallucinations"
+
+
+def hallucinations(language=""):
+    """A pattern for a short piece that starts with an invented phrase, or
+    None. Without a language: the phrases of every language."""
+    files = []
+    for folder in (BUILT_IN, USER_PHRASES):
+        if language:
+            files.append(folder / f"{language}.txt")
+        elif folder.is_dir():
+            files.extend(sorted(folder.glob("*.txt")))
+    phrases = [re.escape(p) for f in files for p in read_lines(f)]
+    if not phrases:
+        return None
+    return re.compile(rf"^\W*({'|'.join(phrases)})\b.*$", re.IGNORECASE)
 
 
 def read_lines(path):
@@ -84,7 +99,8 @@ def build_prompt(intro, dictionaries, last_text, context=""):
             break
         words.append(word)
         used += len(word) + 2
-    listed = f" Słowa: {', '.join(words)}." if words else ""
+    # Only the words: a label would be in one language for every language.
+    listed = f" {', '.join(words)}." if words else ""
     return f"{intro}{listed}{tail}"
 
 
@@ -105,9 +121,13 @@ def read_replacements(path):
     return rules
 
 
-def clean(text, replacements_path):
-    """Apply replacements; return "" for hallucinations and repetition loops."""
-    if HALLUCINATIONS.match(text) and len(text) < 60:
+def clean(text, replacements, language=""):
+    """Apply replacements; return "" for hallucinations and repetition loops.
+
+    `replacements`: a file, or a list of files applied in order (a
+    session's own first)."""
+    invented = hallucinations(language)
+    if invented and invented.match(text) and len(text) < 60:
         return ""
     words = text.split()
     run = 1
@@ -115,6 +135,8 @@ def clean(text, replacements_path):
         run = run + 1 if a.strip(",.").lower() == b.strip(",.").lower() else 1
         if run > MAX_REPEATS:
             return ""
-    for pattern, right in read_replacements(replacements_path):
-        text = pattern.sub(right, text)
+    paths = [replacements] if isinstance(replacements, (str, Path)) else replacements
+    for path in paths:
+        for pattern, right in read_replacements(path):
+            text = pattern.sub(right, text)
     return text

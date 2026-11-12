@@ -1,5 +1,6 @@
 # Fixes applied after speech recognition, one per line: "wrong => right".
-# Whole words, case-insensitive. Use them for words that Whisper keeps
-# getting wrong even with the dictionary.
+# Whole words, case-insensitive; the wrong form's hyphens may stand
+# anywhere. Use them for words that Whisper keeps getting wrong even with
+# the dictionary. A session can have its own in its folder.
 
 ti maks => tmux
