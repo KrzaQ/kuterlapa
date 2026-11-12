@@ -468,8 +468,11 @@ def attach(host: str, session: str) -> str:
         if name == session and on_host:
             subprocess.run(iterm + ["tab", str(t["window"]), str(t["tab"])], capture_output=True, text=True, timeout=15)
             return f"Went to iTerm tab {t['window']}.{t['tab']}, which shows the tmux session {session}."
-    command = f"ssh -t {shlex.quote(host)} tmux attach -t {shlex.quote(session)}" if remote \
-        else f"tmux attach -t {shlex.quote(session)}"
+    # "-u": UTF-8 in any case. "ssh host command" starts no login shell, so
+    # the host sets no LANG, and tmux would show every non-ASCII letter
+    # (ą, ę, ó; Claude Code's ❯) as "_".
+    command = f"ssh -t {shlex.quote(host)} tmux -u attach -t {shlex.quote(session)}" if remote \
+        else f"tmux -u attach -t {shlex.quote(session)}"
     done = subprocess.run(iterm + ["new", command], capture_output=True, text=True, timeout=15)
     if done.returncode != 0:
         raise Fail(f"iTerm did not open a tab: {(done.stderr or done.stdout).strip()}")

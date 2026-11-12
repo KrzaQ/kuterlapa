@@ -1,4 +1,4 @@
-description = "Open a tmux session in iTerm, so the user sees it and works in it: goes to the iTerm tab that shows it, or opens a new tab with ssh -t <host> tmux attach -t <session> (on this Mac, tmux attach). Use it when the user asks to enter, open or log in to a tmux session (\"wejdź / zaloguj się do sesji …\"). Session names come from tmux_panes."
+description = "Open a tmux session in iTerm, so the user sees it and works in it: goes to the iTerm tab that shows it, or opens a new tab with ssh -t <host> tmux -u attach -t <session> (on this Mac, tmux -u attach). Use it when the user asks to enter, open or log in to a tmux session (\"wejdź / zaloguj się do sesji …\"). Session names come from tmux_panes."
 command = ["python3", "./tmux.py", "attach", "{host}", "{session}"]
 timeout = 40
 
