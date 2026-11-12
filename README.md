@@ -119,7 +119,8 @@ All in `~/.config/kuterlapa/`:
   tab, in the overlay, without a model),
   `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
-  (erase the text of the last dictation, or press Escape),
+  (erase the text of the last dictation; during a dictation, only end it;
+  otherwise press Escape),
   `"finish-dictation|Return"` (end the dictation, wait for its last words,
   then press Enter), or `"cmd:<shell command>"`. The app reads the file again when it changes.
 - `speech.toml`: Whisper model, language (empty: Whisper detects it),

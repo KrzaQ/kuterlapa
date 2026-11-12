@@ -417,10 +417,15 @@ fn act(state: &Arc<State>, button: &str) -> String {
         Action::FinishDictation { .. } if hide_help(state) => "ok".into(),
         Action::FinishDictation { .. } if state.chat.active() || view::is_open() => "ok".into(),
         Action::EraseDictation { fallback } => {
+            // B during a dictation only ends it: with nothing typed yet, the
+            // fallback (Escape) would reach the window under it.
+            let recording = speech::send("status") == "recording";
             speech::send("cancel");
             let count = std::mem::take(&mut *state.dictated.lock().unwrap()).chars().count();
             if count > 0 {
                 shell::erase(count)
+            } else if recording {
+                "ok".into()
             } else if let Some(key) = fallback {
                 shell::key(&key)
             } else {
