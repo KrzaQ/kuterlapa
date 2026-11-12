@@ -89,14 +89,19 @@ def build_prompt(intro, dictionaries, last_text, context=""):
 
 
 def read_replacements(path):
-    """Lines "wrong => right". Whole words, case-insensitive."""
+    """Lines "wrong => right". Whole words, case-insensitive, and the
+    hyphens of the wrong form may stand anywhere or nowhere: Whisper
+    writes the same misheard word as "ITR-ma" one day and "IT-RMA" the
+    next."""
     rules = []
     for line in read_lines(path):
         if "=>" not in line:
             continue
         wrong, right = (s.strip() for s in line.split("=>", 1))
-        if wrong:
-            rules.append((re.compile(rf"\b{re.escape(wrong)}\b", re.IGNORECASE), right))
+        letters = wrong.replace("-", "")
+        if letters:
+            loose = "-?".join(re.escape(c) for c in letters)
+            rules.append((re.compile(rf"\b{loose}\b", re.IGNORECASE), right))
     return rules
 
 
