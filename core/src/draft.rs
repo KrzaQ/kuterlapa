@@ -28,12 +28,11 @@ edycji (na przykład „zamień X na Y”, „krócej”, „zrób z tego listę
 albo dalszym tekstem do dopisania na końcu. Rozpoznanie mowy bywa niedokładne: popraw oczywiste \
 pomyłki. Dostajesz też wcześniejsze polecenia do tego szkicu: nowa wypowiedź często poprawia to, \
 co z nimi poszło źle („nie, nie”, „cały czas gubisz…”), więc czytaj ją razem z nimi. \
-Użytkownik często literuje. Rozpoznanie zapisuje polskie nazwy liter po swojemu: „ka”, „ky” to k; \
-„er”, „ry” to r; „te”, „ty” to t; „ce”, „cy” to c; „em”, „my” to m; „en” to n; „ef” to f; „es” to s; \
-„el” to l; „be”, „by” to b; „de”, „dy” to d; „pe”, „py” to p; „we” to w; „zet” to z; „ha” to h; \
-„jot” to j; „igrek” to y. „K jak Katarzyna” to k. Myślniki między literami tylko je rozdzielają. \
-W adresach e-mail i stron: „małpa” to @, „kropka” to ., „podkreślnik” to _, „myślnik” to -; \
-bez spacji. Zwróć wyłącznie nowy, pełny szkic: bez komentarzy, bez cudzysłowów, bez bloków kodu.";
+Gdy użytkownik literuje albo dyktuje adres (litery, \
+nazwy symboli takich jak @ czy kropka), podaj ten fragment narzędziu spell_decode: rozpoznanie \
+zapisuje nazwy liter po swojemu, a narzędzie zna je dla języka mowy. Notatki (memory_search, \
+memory_read) podpowiedzą, jak użytkownik zwykle zapisuje adresy i nazwy. Zwróć wyłącznie nowy, \
+pełny szkic: bez komentarzy, bez cudzysłowów, bez bloków kodu.";
 
 #[derive(Default)]
 struct State {
@@ -59,6 +58,9 @@ struct State {
     /// The instruction the model works on now.
     working_on: Option<String>,
 }
+
+/// The tools of the draft's model: they only read.
+const DRAFT_TOOLS: &[&str] = &["spell_decode", "memory_search", "memory_read"];
 
 /// How many earlier instructions the overlay shows under the draft.
 const SHOWN_HISTORY: usize = 4;
@@ -128,6 +130,23 @@ impl Draft {
 
     /// Stop a running recording and apply its speech to the draft.
     fn apply_recording(&self) {
+        if let Some((draft, pending)) = self.take_recording() {
+            self.edit(draft, pending);
+        }
+    }
+
+    /// The draft button during a recording: ends it at once, so the next
+    /// button sees it ended. The first words become the draft; later words
+    /// come back as a job for the model (`edit`), which the caller runs in
+    /// the background: the app waits for each button's answer.
+    pub fn finish_recording(&self) -> Option<(String, String)> {
+        speech::send("finish");
+        self.take_recording()
+    }
+
+    /// The recording's words: set as the draft (None), or the draft and
+    /// the instruction for the model.
+    fn take_recording(&self) -> Option<(String, String)> {
         let (draft, pending) = {
             let mut s = self.state.lock().unwrap();
             s.recording = false;
@@ -135,7 +154,7 @@ impl Draft {
             if pending.is_empty() {
                 drop(s);
                 self.show();
-                return;
+                return None;
             }
             if s.text.is_empty() {
                 s.history = vec![format!("(pierwsze dyktowanie) {pending}")];
@@ -143,18 +162,18 @@ impl Draft {
                 s.last_edit = None;
                 drop(s);
                 self.show();
-                return;
+                return None;
             }
             s.busy = true;
             (s.text.clone(), pending)
         };
         self.show();
-        self.edit(draft, pending);
+        Some((draft, pending))
     }
 
     /// The current model applies `instruction` to `before`, which becomes
     /// the draft. Remembers the edit, so another model can redo it.
-    fn edit(&self, before: String, instruction: String) {
+    pub fn edit(&self, before: String, instruction: String) {
         let profile = self.profile();
         let earlier = {
             let mut s = self.state.lock().unwrap();
@@ -168,7 +187,9 @@ impl Draft {
             format!("Wcześniejsze polecenia do tego szkicu, od najstarszego (już wykonane):\n{earlier}\n\n")
         };
         let user = format!("Szkic:\n<<<\n{before}\n>>>\n\n{earlier}Nowa wypowiedź użytkownika:\n<<<\n{instruction}\n>>>");
-        let result = engines::complete(&profile, EDIT_PROMPT, &user);
+        // Tools that only read: decoding spelled letters, and the notes.
+        let session = crate::sessions::current_name();
+        let result = engines::complete_reading(&profile, EDIT_PROMPT, &user, &session, DRAFT_TOOLS);
         {
             let mut s = self.state.lock().unwrap();
             s.busy = false;

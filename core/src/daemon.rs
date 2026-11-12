@@ -302,6 +302,14 @@ fn act(state: &Arc<State>, button: &str) -> String {
             "ok".into()
         }
         Action::EraseDictation { .. } if hide_help(state) => "ok".into(),
+        // Pressed while the draft records: end it now, edit in the
+        // background, so B can still discard while the model works.
+        Action::Dictate if state.draft.takes_dictation() => {
+            if let Some((before, instruction)) = state.draft.finish_recording() {
+                in_background(state, move |state| state.draft.edit(before, instruction));
+            }
+            "ok".into()
+        }
         Action::Dictate if state.draft.active() => {
             state.draft.button();
             "ok".into()

@@ -70,9 +70,18 @@ pub fn is_cancelled(error: &anyhow::Error) -> bool {
     error.downcast_ref::<Cancelled>().is_some()
 }
 
-/// One request without tools.
-pub fn complete(profile: &Profile, system: &str, user: &str) -> Result<String> {
-    run(profile, system, user, None, None, &|_| {}, "draft")
+/// The tools a request may use: those of a session, or only the named
+/// ones (for a model that only reads, such as the draft's).
+#[derive(Clone, Copy)]
+pub struct ToolSet<'a> {
+    pub session: &'a str,
+    pub only: Option<&'a [&'a str]>,
+}
+
+/// One request for the draft: only the named Kuterlapa tools (which only
+/// read), no shell, no web.
+pub fn complete_reading(profile: &Profile, system: &str, user: &str, session: &str, only: &[&str]) -> Result<String> {
+    run(profile, system, user, None, Some(ToolSet { session, only: Some(only) }), &|_| {}, "draft")
 }
 
 /// Like `complete`, run in `folder`: the engine then reads that project's
@@ -91,6 +100,7 @@ pub fn complete_in(
     tools: Option<&str>,
     progress: &dyn Fn(&Activity),
 ) -> Result<String> {
+    let tools = tools.map(|session| ToolSet { session, only: None });
     run(profile, system, user, folder, tools, progress, "chat")
 }
 
@@ -100,7 +110,7 @@ fn run(
     system: &str,
     user: &str,
     folder: Option<&Path>,
-    tools: Option<&str>,
+    tools: Option<ToolSet>,
     progress: &dyn Fn(&Activity),
     purpose: &str,
 ) -> Result<String> {
@@ -151,7 +161,7 @@ fn run(
     activity.finished = Some(activity.started.elapsed());
     progress(&activity);
     // Saved even when cancelled: the tokens were used.
-    let session = tools.map(str::to_string).unwrap_or_else(crate::sessions::current_name);
+    let session = tools.map(|t| t.session.to_string()).unwrap_or_else(crate::sessions::current_name);
     crate::usage::record(profile, &session, purpose, &activity.calls);
     let status = child.wait();
     let errors = errors.join().unwrap_or_default();
@@ -176,20 +186,24 @@ fn run(
 
 /// `project`: keep Claude Code's own system prompt and the project's
 /// CLAUDE.md, and add ours; otherwise ours replaces it.
-fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<&str>) -> Command {
+fn claude(profile: &Profile, system: &str, user: &str, project: bool, tools: Option<ToolSet>) -> Command {
     let mut c = Command::new("claude");
     c.args(["-p", "--model", &profile.model, "--no-session-persistence"]);
     // Events while it works; the thinking as a summary (Claude Code leaves
     // it out by default).
     c.args(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     c.args(["--thinking-display", "summarized"]);
-    match tools.and_then(|session| mcp_config(session, profile.local)) {
+    match tools.and_then(|t| mcp_config(t, profile.local).map(|config| (config, t.only.is_some()))) {
         // Claude Code's own tools stay off (no files) except web search, and
         // its shell when the profile allows it. Its permission classifier
         // ("auto") judges each tool call; tools that must ask the user do it
         // in `kuterlapa mcp`.
-        Some(config) => {
-            let builtin = if profile.shell { "WebSearch,WebFetch,Bash" } else { "WebSearch,WebFetch" };
+        Some((config, reading)) => {
+            let builtin = match (reading, profile.shell) {
+                (true, _) => "",
+                (false, true) => "WebSearch,WebFetch,Bash",
+                (false, false) => "WebSearch,WebFetch",
+            };
             c.args(["--tools", builtin, "--mcp-config", &config, "--strict-mcp-config"]);
             c.args(["--permission-mode", "auto"]);
         }
@@ -320,7 +334,7 @@ fn dialog(request: &Value) -> Option<Value> {
 }
 
 /// The request itself goes in later, as an RPC command (see run()).
-fn pi(profile: &Profile, system: &str, project: bool, tools: Option<&str>) -> Command {
+fn pi(profile: &Profile, system: &str, project: bool, tools: Option<ToolSet>) -> Command {
     let mut c = Command::new("pi");
     c.args(["--mode", "rpc", "--no-session", "--model", &profile.model]);
     let extension = tools.and_then(|_| pi_extension());
@@ -330,12 +344,22 @@ fn pi(profile: &Profile, system: &str, project: bool, tools: Option<&str>) -> Co
         // registers the server for this run only; pi's own settings stay as
         // they are, so its extensions (for example a permission classifier)
         // still judge each call.
-        (Some(session), Some(extension), Ok(me)) => {
+        (Some(set), Some(extension), Ok(me)) => {
             c.arg("-e").arg(extension);
-            // pi's own bash when the profile allows a shell: pi-censor
-            // judges each command with its rules for shells.
-            c.args(["--tools", if profile.shell { "bash,mcp__kuterlapa__*" } else { "mcp__kuterlapa__*" }]);
-            c.env("KUTERLAPA_EXE", me).env("KUTERLAPA_SESSION", session);
+            match set.only {
+                // Only the named tools, and no shell.
+                Some(names) => {
+                    let list: Vec<String> = names.iter().map(|n| format!("mcp__kuterlapa__{n}")).collect();
+                    c.args(["--tools", &list.join(",")]);
+                    c.env("KUTERLAPA_ONLY", names.join(","));
+                }
+                // pi's own bash when the profile allows a shell: pi-censor
+                // judges each command with its rules for shells.
+                None => {
+                    c.args(["--tools", if profile.shell { "bash,mcp__kuterlapa__*" } else { "mcp__kuterlapa__*" }]);
+                }
+            }
+            c.env("KUTERLAPA_EXE", me).env("KUTERLAPA_SESSION", set.session);
             if profile.local {
                 c.env("KUTERLAPA_LOCAL", "1");
             }
@@ -368,11 +392,15 @@ fn pi_extension() -> Option<std::path::PathBuf> {
 }
 
 /// The MCP configuration that starts this program as the tool server.
-fn mcp_config(session: &str, local: bool) -> Option<String> {
+fn mcp_config(tools: ToolSet, local: bool) -> Option<String> {
     let me = std::env::current_exe().ok()?;
-    let mut args = vec!["mcp", "--session", session];
+    let only = tools.only.map(|names| names.join(","));
+    let mut args = vec!["mcp", "--session", tools.session];
     if local {
         args.push("--local");
+    }
+    if let Some(only) = &only {
+        args.extend(["--only", only.as_str()]);
     }
     let server = json!({ "command": me, "args": args });
     Some(json!({ "mcpServers": { "kuterlapa": server } }).to_string())
