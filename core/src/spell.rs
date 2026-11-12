@@ -63,7 +63,12 @@ pub struct Decoded {
 /// letters taken apart ("ty.cy" is "ty", ".", "cy").
 fn pieces(text: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for word in text.split(|c: char| c.is_whitespace() || matches!(c, '-' | ',' | ';' | '!' | '?' | '"' | '„' | '”')) {
+    // Dashes of every kind separate letters: speech recognition may write
+    // a hyphen (‐ ‑), an en or em dash (– —) or a minus sign (−).
+    let separator = |c: char| {
+        c.is_whitespace() || matches!(c, '-' | '‐' | '‑' | '‒' | '–' | '—' | '−' | ',' | ';' | '!' | '?' | '"' | '„' | '”')
+    };
+    for word in text.split(separator) {
         let mut current = String::new();
         let mut previous_lower = false;
         for c in word.chars() {
@@ -208,6 +213,12 @@ mod tests {
         let d = pl("ka i e kot");
         assert_eq!(d.text, "kiekot");
         assert_eq!(d.unknown, vec!["kot".to_string()]);
+    }
+
+    #[test]
+    fn any_dash_separates() {
+        assert_eq!(pl("K–o—ty‐e‑ky").text, "kotek");
+        assert_eq!(pl("jan łącznik kowal").text, "jan-kowal");
     }
 
     #[test]

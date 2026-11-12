@@ -47,7 +47,10 @@ z = ["zet", "zy"]
 "@" = ["małpa", "małpą", "małpka", "at"]
 "." = ["kropka", "kropką", "kropki"]
 "_" = ["podkreślnik", "podłoga", "podkreślenie"]
-"-" = ["myślnik", "minus", "kreska"]
+# In an address or a code the sign is always the ASCII "-". Its Polish name
+# is "łącznik" or "dywiz"; "myślnik" is the longer dash of prose (–), but
+# people spelling an address say it for "-" too.
+"-" = ["łącznik", "dywiz", "myślnik", "minus", "kreska"]
 "/" = ["ukośnik", "slash"]
 ":" = ["dwukropek"]
 " " = ["spacja"]
