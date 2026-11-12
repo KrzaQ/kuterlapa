@@ -10,6 +10,7 @@
 //! answers.
 
 use crate::{hooks, shell, voice};
+use lejce::{Answer, Question};
 use serde_json::{json, Value};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
@@ -21,13 +22,6 @@ const WAIT: Duration = Duration::from_secs(140);
 
 /// At most this many options: more do not fit, and are hard to go through.
 pub const MAX_OPTIONS: usize = 6;
-
-enum Answer {
-    Yes,
-    No,
-    Chose(usize),
-    ChoseMany(Vec<usize>),
-}
 
 struct Pending {
     sender: Sender<Answer>,
@@ -61,15 +55,12 @@ fn choices(p: &Pending) -> Value {
     json!(rows)
 }
 
-/// Asks the user and waits. `restore` shows the overlay as it was before.
-/// Returns the answer for the MCP server: "yes", "chose <n>: <option>"
-/// (from 1) or "no: <why>".
+/// Asks the user a question from the MCP server and waits. `restore`
+/// shows the overlay as it was before. Returns the answer for the MCP
+/// server: "yes", "chose <n>: <option>" (from 1) or "no: <why>".
 pub fn ask(question: &str, restore: impl Fn()) -> String {
     let question: Value = serde_json::from_str(question).unwrap_or(Value::Null);
     let text = |key: &str| question.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-    let (tool, description, command) = (text("tool"), text("description"), text("command"));
-    // A model's own question (ask_user), not a tool waiting.
-    let question_only = text("kind") == "question";
     let options: Vec<String> = question["options"]
         .as_array()
         .into_iter()
@@ -79,19 +70,62 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
         .filter(|o| !o.is_empty())
         .take(MAX_OPTIONS)
         .collect();
-    let multiple = question_only && question["multiple"].as_bool().unwrap_or(false) && !options.is_empty();
-    let choice = question_only && (options.len() >= 2 || multiple);
+    let question = Question {
+        // A model's own question (ask_user) has no tool waiting.
+        tool: (text("kind") != "question").then(|| text("tool")),
+        text: text("description"),
+        detail: text("command"),
+        options,
+        multiple: question["multiple"].as_bool().unwrap_or(false),
+    };
+    let options = &question.options;
+    match show(&text("title"), &question, restore) {
+        None => "no: another question is waiting".into(),
+        Some(Answer::Yes) => "yes".into(),
+        Some(Answer::Chose(picked)) => format!(
+            "chose {}: {}",
+            picked.iter().map(|i| (i + 1).to_string()).collect::<Vec<_>>().join(","),
+            picked.iter().map(|&i| options[i].as_str()).collect::<Vec<_>>().join(", ")
+        ),
+        Some(Answer::No) if is_choice(&question) => "no: the user cancelled".into(),
+        Some(Answer::No) => "no: the user said no".into(),
+        Some(Answer::Unanswered) => "no: the user did not answer".into(),
+    }
+}
+
+/// Several may be picked: only in a model's own question with options.
+fn is_multiple(question: &Question) -> bool {
+    question.tool.is_none() && question.multiple && !question.options.is_empty()
+}
+
+/// A choice between options, not yes or no.
+fn is_choice(question: &Question) -> bool {
+    question.tool.is_none() && (question.options.len() >= 2 || is_multiple(question))
+}
+
+/// Shows a question in the overlay, reads it aloud when the voice is on,
+/// and waits for the answer. `title` may be empty. `restore` shows the
+/// overlay as it was before. None if another question is waiting.
+pub fn show(title: &str, question: &Question, restore: impl Fn()) -> Option<Answer> {
+    let description = &question.text;
+    let question_only = question.tool.is_none();
+    let options = &question.options;
+    let multiple = is_multiple(question);
+    let choice = is_choice(question);
     let mut overlay = json!({
         "visible": true,
-        "title": match text("title") {
-            t if !t.is_empty() => t,
+        "title": match title {
+            t if !t.is_empty() => t.to_string(),
             _ if question_only => "Pytanie modelu".into(),
             _ => "Zgoda".into(),
         },
         "status": "Czekam na Twoją decyzję",
-        "heading": if question_only { description.clone() } else { tool.replace('_', " ") },
+        "heading": match &question.tool {
+            None => description.clone(),
+            Some(tool) => tool.replace('_', " "),
+        },
         "text": if question_only { String::new() } else { description.clone() },
-        "detail": command,
+        "detail": question.detail,
         "buttons": if choice {
             json!([{ "key": "A", "label": "Wybierz", "tone": "yes" }, { "key": "B", "label": "Anuluj", "tone": "no" }])
         } else {
@@ -103,7 +137,7 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
     {
         let mut pending = PENDING.lock().unwrap();
         if pending.is_some() {
-            return "no: another question is waiting".into();
+            return None;
         }
         let mut p = Pending {
             sender,
@@ -138,21 +172,10 @@ pub fn ask(question: &str, restore: impl Fn()) -> String {
             voice::send(&format!("say Czy pozwalasz? {description}"));
         }
     }
-    let answer = receiver.recv_timeout(WAIT);
+    let answer = receiver.recv_timeout(WAIT).unwrap_or(Answer::Unanswered);
     PENDING.lock().unwrap().take();
     restore();
-    match answer {
-        Ok(Answer::Yes) => "yes".into(),
-        Ok(Answer::Chose(i)) => format!("chose {}: {}", i + 1, options[i]),
-        Ok(Answer::ChoseMany(picked)) => format!(
-            "chose {}: {}",
-            picked.iter().map(|i| (i + 1).to_string()).collect::<Vec<_>>().join(","),
-            picked.iter().map(|&i| options[i].as_str()).collect::<Vec<_>>().join(", ")
-        ),
-        Ok(Answer::No) if choice => "no: the user cancelled".into(),
-        Ok(Answer::No) => "no: the user said no".into(),
-        Err(_) => "no: the user did not answer".into(),
-    }
+    Some(answer)
 }
 
 /// Moves the mark of a waiting choice up (-1) or down (1), around the
@@ -197,8 +220,8 @@ pub fn answer(yes: bool) -> bool {
             let answer = match (yes, p.options.is_empty(), p.multiple) {
                 (false, _, _) => Answer::No,
                 (true, true, _) => Answer::Yes,
-                (true, false, true) => Answer::ChoseMany(p.ticked.iter().enumerate().filter(|(_, &t)| t).map(|(i, _)| i).collect()),
-                (true, false, false) => Answer::Chose(p.selected),
+                (true, false, true) => Answer::Chose(p.ticked.iter().enumerate().filter(|(_, &t)| t).map(|(i, _)| i).collect()),
+                (true, false, false) => Answer::Chose(vec![p.selected]),
             };
             let _ = p.sender.send(answer);
             true
