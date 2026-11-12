@@ -1,11 +1,6 @@
-description = "Bring an iTerm2 tab to the front, by the numbers from iterm_tabs."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "tab", "{window}", "{tab}"]
+description = "Switch to an iTerm2 tab: the tab, its window and iTerm come to the front, so the user sees it. After that, the other iterm_* tools work on it without a target."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "tab", "{target}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, the part before the dot"
-
-[params.tab]
-type = "integer"
-description = "Tab number, the part after the dot"
+[params.target]
+description = "The tab as window.tab from iterm_tabs, for example 2.3"

@@ -1,14 +1,10 @@
 description = "Put text into a text field of a Chrome page, by its number from chrome_fields, as typing would (the page notices it). It then reads the field back and answers what it shows, or an error when the page did not take the text. After the page changed (a new step, a dialog), list the fields again: numbers change. For checkboxes, radio buttons and buttons use chrome_click. With submit = \"submit\", also send the field's form (like pressing Enter). It refuses password fields: use keepass_type, or the user types them. Never fill card numbers or other secrets."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "fill", "{window}", "{tab}", "{field}", "{text}", "{submit}"]
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "fill", "{target}", "{field}", "{text}", "{submit}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs (for example 2.3). Leave it out: the tool works on the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false
 
 [params.field]
 type = "integer"

@@ -2,7 +2,8 @@
 // Automation. Run: osascript -l JavaScript chrome.js <command> [args]
 //
 //   tabs                       windows and their tabs; * marks the active tab
-//   tab <window> <tab>         bring that tab to the front
+//   tab <target>               bring that tab, its window and Chrome to the
+//                              front
 //   close <window> <tab>...    close tabs of one window (cmd+shift+t in
 //                              Chrome brings a tab back)
 //   open <url> [profile] [new|tab] open the address in a new tab of the
@@ -13,15 +14,17 @@
 //   profiles                   the names of Chrome's profiles
 //
 // Pages, through JavaScript in the tab (Chrome: View, Developer, Allow
-// JavaScript from Apple Events must be on). Window and tab 0 mean the front
-// window and its active tab:
+// JavaScript from Apple Events must be on). A target is "window.tab" from
+// `tabs`, for example "2.3". An empty target means the front window's active
+// tab: the one the user sees. Models work there unless the user named
+// another tab.
 //
-//   read <w> <t> [chars]       the page's title, address and text
-//   fields <w> <t>             its fields, buttons and links, numbered
-//   fill <w> <t> <n> <text> [submit]
+//   read <target> [chars]      the page's title, address and text
+//   fields <target>            its fields, buttons and links, numbered
+//   fill <target> <n> <text> [submit]
 //                              put text into field n (as typing would), and
 //                              with "submit" send its form
-//   click <w> <t> <n>          click element n
+//   click <target> <n>         click element n
 //
 // computer_windows shows which profile each Chrome window belongs to.
 
@@ -51,9 +54,26 @@ function quote(s) {
 	return "'" + String(s).replace(/'/g, "'\\''") + "'";
 }
 
-function tabAt(c, windowNumber, tabNumber) {
-	const w = Number(windowNumber) > 0 ? c.windows[Number(windowNumber) - 1] : c.windows[0];
-	return Number(tabNumber) > 0 ? w.tabs[Number(tabNumber) - 1] : w.activeTab();
+/** "2.3" as [2, 3]; empty or "0" as [0, 0], the front tab. */
+function parseTarget(target) {
+	const text = String(target || "").trim();
+	if (!text || text === "0" || text === "0.0") return [0, 0];
+	const m = /^(\d+)\.(\d+)$/.exec(text);
+	if (!m) throw new Error(`bad target "${text}": give window.tab from chrome_tabs, for example 2.3, or leave it out for the front tab`);
+	return [Number(m[1]), Number(m[2])];
+}
+
+function windowAt(c, number) {
+	if (c.windows.length === 0) throw new Error("Chrome has no windows");
+	if (number > c.windows.length) throw new Error(`no window ${number}; see chrome_tabs`);
+	return c.windows[number > 0 ? number - 1 : 0];
+}
+
+function tabAt(c, target) {
+	const [wn, tn] = parseTarget(target);
+	const w = windowAt(c, wn);
+	if (tn > w.tabs.length) throw new Error(`no tab ${wn}.${tn}; see chrome_tabs`);
+	return tn > 0 ? w.tabs[tn - 1] : w.activeTab();
 }
 
 /** Runs JavaScript in a tab; the page's answer is a JSON string. */
@@ -101,6 +121,14 @@ const FIND = (n) => `
     .replace(/\\s+/g, " ").trim().slice(0, 60);`;
 
 function run(argv) {
+	try {
+		return main(argv);
+	} catch (e) {
+		return `error: ${e.message}`;
+	}
+}
+
+function main(argv) {
 	const [command, ...args] = argv;
 	const c = chrome();
 	switch (command) {
@@ -119,11 +147,18 @@ function run(argv) {
 			return out.join("\n") || "No windows.";
 		}
 		case "tab": {
-			const w = c.windows[Number(args[0]) - 1];
-			w.activeTabIndex = Number(args[1]);
+			// "2.3", or "2" "3" as two arguments.
+			const target = args.length > 1 ? `${args[0]}.${args[1]}` : args[0];
+			if (!String(target || "").trim()) return "error: give the tab as window.tab from chrome_tabs";
+			const [wn, tn] = parseTarget(target);
+			const w = windowAt(c, wn);
+			if (tn < 1 || tn > w.tabs.length) return `error: no tab ${target}; see chrome_tabs`;
+			w.activeTabIndex = tn;
+			// The window and Chrome come to the front too, so the user sees
+			// the tab, on whatever screen or desktop its window is.
 			w.index = 1;
 			c.activate();
-			return `Tab ${args[0]}.${args[1]}: ${w.activeTab().title()}`;
+			return `Tab ${target}: ${w.activeTab().title()}, now in front.`;
 		}
 		case "close": {
 			const w = c.windows[Number(args[0]) - 1];
@@ -169,28 +204,29 @@ function run(argv) {
 			} else {
 				c.windows[0].tabs.push(c.Tab({ url }));
 			}
+			c.windows[0].index = 1;
 			c.activate();
-			return "Opened.";
+			return "Opened, now in front. The other chrome_* tools work on it without a target.";
 		}
 		case "profiles":
 			return Object.keys(profiles()).join("\n");
 		case "read": {
-			const tab = tabAt(c, args[0], args[1]);
-			const limit = Math.min(Number(args[2]) || 6000, 30000);
+			const tab = tabAt(c, args[0]);
+			const limit = Math.min(Number(args[1]) || 6000, 30000);
 			const text = inPage(tab, `document.body ? document.body.innerText.slice(0, ${limit}) : ""`);
 			if (text.startsWith("error:")) return text;
 			return `${tab.title()}\n${tab.url()}\n\n${text}`;
 		}
 		case "fields": {
-			const tab = tabAt(c, args[0], args[1]);
+			const tab = tabAt(c, args[0]);
 			const answer = inPage(tab, MARK);
 			if (answer.startsWith("error:")) return answer;
 			const list = JSON.parse(answer || "[]");
 			return `${tab.title()}\n` + (list.length ? list.join("\n") : "No fields, buttons or links.");
 		}
 		case "fill": {
-			const [w, t, n, text, submit] = args;
-			const tab = tabAt(c, w, t);
+			const [target, n, text, submit] = args;
+			const tab = tabAt(c, target);
 			const code = `(() => {${FIND(n)}
   if (el.type === "password") return "error: Kuterlapa does not fill passwords";
   if (["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"].includes(el.type) ||
@@ -242,13 +278,13 @@ function run(argv) {
 			return `Filled ${n} (${JSON.stringify(name)}): it shows ${JSON.stringify(value)}.`;
 		}
 		case "click": {
-			const tab = tabAt(c, args[0], args[1]);
-			const n = Number(args[2]);
+			const tab = tabAt(c, args[0]);
+			const n = Number(args[1]);
 			const answer = inPage(tab, `(() => {${FIND(n)}
   el.scrollIntoView({ block: "center" }); el.click(); return "ok: " + JSON.stringify(name || el.innerText?.trim().slice(0, 60) || ""); })()`);
 			return answer.startsWith("ok") ? `Clicked ${n} ${answer.slice(4)}.` : answer;
 		}
 		default:
-			return "usage: chrome.js tabs | tab <w> <t> | close <w> <t>... | open <url> [profile] [new|tab] | profiles | read <w> <t> [chars] | fields <w> <t> | fill <w> <t> <n> <text> [submit] | click <w> <t> <n>";
+			return "usage: chrome.js tabs | tab <target> | close <w> <t>... | open <url> [profile] [new|tab] | profiles | read <target> [chars] | fields <target> | fill <target> <n> <text> [submit] | click <target> <n>";
 	}
 }

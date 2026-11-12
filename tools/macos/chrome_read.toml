@@ -1,15 +1,11 @@
-description = "Read the page in a Chrome tab as text: its title, address and visible text. Faster and more exact than a screenshot. Window and tab come from chrome_tabs; 0 and 0 mean the front window's active tab."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "read", "{window}", "{tab}", "{chars}"]
+description = "Read the page in a Chrome tab as text: its title, address and visible text. Faster and more exact than a screenshot. By default the tab the user sees."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "read", "{target}", "{chars}"]
 timeout = 20
 read_only = true
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs (for example 2.3). Leave it out: the tool works on the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false
 
 [params.chars]
 type = "integer"

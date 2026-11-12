@@ -1,14 +1,10 @@
 description = "Click a button or link of a Chrome page, by its number from chrome_fields."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "click", "{window}", "{tab}", "{element}"]
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "click", "{target}", "{element}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs (for example 2.3). Leave it out: the tool works on the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false
 
 [params.element]
 type = "integer"

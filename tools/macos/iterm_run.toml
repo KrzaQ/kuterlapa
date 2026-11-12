@@ -1,14 +1,10 @@
-description = "Run a shell command in an iTerm2 tab and answer with only the output that came after it (old text in the tab is left out). The text goes straight to the tab, whatever window is in front; prefer it to computer_type for terminals. Use the SSH aliases the user has (ssh <alias>); never type passwords. For a long command, give more seconds, or read the tab later with iterm_read."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "run", "{window}", "{tab}", "{command}", "{seconds}"]
+description = "Run a shell command in the iTerm2 tab in front and answer with only the output that came after it (old text in the tab is left out). The text goes straight to the tab, whatever window is in front; prefer it to computer_type for terminals. Use the SSH aliases the user has (ssh <alias>); never type passwords. For a long command, give more seconds, or read the tab later with iterm_read."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "run", "{target}", "{command}", "{seconds}"]
 timeout = 130
 
-[params.window]
-type = "integer"
-description = "Window number from iterm_tabs, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number from iterm_tabs, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from iterm_tabs (for example 2.3). Leave it out: the tool works on the tab in front, which the user sees. Give it only when the user named another tab."
+required = false
 
 [params.command]
 description = "The command line to run"

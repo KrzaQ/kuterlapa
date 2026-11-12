@@ -1,12 +1,8 @@
 description = "List the fields, buttons and links of the page in a Chrome tab, numbered, with their labels and values, for chrome_fill and chrome_click. Call it again after the page changes: the numbers are for the page as it is now."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "fields", "{window}", "{tab}"]
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "fields", "{target}"]
 timeout = 20
 read_only = true
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs (for example 2.3). Leave it out: the tool works on the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false

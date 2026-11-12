@@ -1,15 +1,11 @@
-description = "Read the text of an iTerm2 tab (its last lines), straight from the terminal: better than a screenshot. Window and tab numbers come from iterm_tabs; 0 and 0 mean the front window's active tab."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "read", "{window}", "{tab}", "{lines}"]
+description = "Read the text of the iTerm2 tab in front (its last lines), straight from the terminal: better than a screenshot."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "read", "{target}", "{lines}"]
 timeout = 20
 read_only = true
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from iterm_tabs (for example 2.3). Leave it out: the tool works on the tab in front, which the user sees. Give it only when the user named another tab."
+required = false
 
 [params.lines]
 type = "integer"

@@ -1,4 +1,4 @@
-description = "Open a new iTerm2 tab in the front window, and optionally run a command in it at once (for example ssh myserver). Then read it with iterm_read 0 0."
+description = "Open a new iTerm2 tab in the front window and bring iTerm to the front, and optionally run a command in it at once (for example ssh myserver). The other iterm_* tools then work on it without a target."
 command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "new", "{command}"]
 timeout = 20
 

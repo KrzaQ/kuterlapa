@@ -4,17 +4,20 @@
 //   tabs                          windows and their tabs: the name of each
 //                                 tab's session and its folder; * marks the
 //                                 active tab
-//   tab <window> <tab>            bring that tab to the front
-//   read <window> <tab> [lines]   the last lines of a tab's text
-//   run <window> <tab> <command> [seconds]
+//   tab <target>                  bring that tab, its window and iTerm to
+//                                 the front
+//   read <target> [lines]         the last lines of a tab's text
+//   run <target> <command> [seconds]
 //                                 type the command into the tab and answer
 //                                 with only the text that came after it
 //   new [command]                 a new tab in the front window, and run the
-//                                 command in it
-//   close <window> <tab>          close a tab
-//   interrupt <window> <tab>      press Ctrl+C in a tab
+//                                 command in it; iTerm comes to the front
+//   close <target>                close a tab (the target is required)
+//   interrupt <target>            press Ctrl+C in a tab
 //
-// Window and tab 0 (or nothing) mean the front window and its active tab.
+// A target is "window.tab" from `tabs`, for example "2.3". An empty target
+// means the front window's active tab: the one the user sees. Models work
+// there unless the user named another tab.
 // The text goes to the tab itself, whatever window is in front: typing
 // keys would go to the application in front instead.
 
@@ -26,15 +29,32 @@ function folder(session) {
 	}
 }
 
-function windowAt(iterm, number) {
-	const n = Number(number) || 0;
-	return n > 0 ? iterm.windows[n - 1] : iterm.currentWindow();
+/** "2.3" as [2, 3]; empty or "0" as [0, 0], the front tab. */
+function parseTarget(target) {
+	const text = String(target || "").trim();
+	if (!text || text === "0" || text === "0.0") return [0, 0];
+	const m = /^(\d+)\.(\d+)$/.exec(text);
+	if (!m) throw new Error(`bad target "${text}": give window.tab from iterm_tabs, for example 2.3, or leave it out for the front tab`);
+	return [Number(m[1]), Number(m[2])];
 }
 
-function sessionAt(iterm, windowNumber, tabNumber) {
-	const w = windowAt(iterm, windowNumber);
-	const t = Number(tabNumber) || 0;
-	return t > 0 ? w.tabs[t - 1].currentSession() : w.currentSession();
+function windowAt(iterm, number) {
+	if (number > 0) {
+		if (number > iterm.windows.length) throw new Error(`no window ${number}; see iterm_tabs`);
+		return iterm.windows[number - 1];
+	}
+	return iterm.currentWindow();
+}
+
+function tabAt(iterm, target) {
+	const [wn, tn] = parseTarget(target);
+	const w = windowAt(iterm, wn);
+	if (tn > w.tabs.length) throw new Error(`no tab ${wn}.${tn}; see iterm_tabs`);
+	return { window: w, tab: tn > 0 ? w.tabs[tn - 1] : w.currentTab() };
+}
+
+function sessionAt(iterm, target) {
+	return tabAt(iterm, target).tab.currentSession();
 }
 
 /** The text of a session without the empty lines at its end. */
@@ -45,6 +65,14 @@ function lines(session) {
 }
 
 function run(argv) {
+	try {
+		return main(argv);
+	} catch (e) {
+		return `error: ${e.message}`;
+	}
+}
+
+function main(argv) {
 	const [command, ...args] = argv;
 	const iterm = Application("iTerm2");
 	if (command !== "new" && !iterm.running()) return "iTerm is not running.";
@@ -67,20 +95,25 @@ function run(argv) {
 			return out.join("\n") || "No windows.";
 		}
 		case "tab": {
-			const w = windowAt(iterm, args[0]);
-			w.tabs[Number(args[1]) - 1].select();
+			// "2.3", or "2" "3" as two arguments.
+			const target = args.length > 1 ? `${args[0]}.${args[1]}` : args[0];
+			if (!String(target || "").trim()) return "error: give the tab as window.tab from iterm_tabs";
+			const { window: w, tab } = tabAt(iterm, target);
+			tab.select();
+			// The window and iTerm come to the front too, so the user sees
+			// the tab, on whatever screen or desktop its window is.
 			w.select();
 			iterm.activate();
-			return `Tab ${args[0]}.${args[1]}: ${w.currentTab().currentSession().name()}`;
+			return `Tab ${target}: ${tab.currentSession().name()}, now in front.`;
 		}
 		case "read": {
-			const s = sessionAt(iterm, args[0], args[1]);
-			const count = Math.min(Number(args[2]) || 40, 400);
+			const s = sessionAt(iterm, args[0]);
+			const count = Math.min(Number(args[1]) || 40, 400);
 			return `${s.name()}:\n` + lines(s).slice(-count).join("\n");
 		}
 		case "run": {
-			const [w, t, text, seconds] = args;
-			const s = sessionAt(iterm, w, t);
+			const [target, text, seconds] = args;
+			const s = sessionAt(iterm, target);
 			const before = lines(s).length;
 			s.write({ text });
 			// Wait for output: until the text stops changing for a second,
@@ -107,21 +140,25 @@ function run(argv) {
 			const tab = iterm.windows().length && w.tabs().length ? w.createTabWithDefaultProfile() : w.currentTab();
 			const text = args.join(" ").trim();
 			if (text) tab.currentSession().write({ text });
-			return `New tab${text ? `, ran: ${text}` : ""}. Use iterm_read on the front window's active tab to see it.`;
+			// The user asked for the tab: show it.
+			w.select();
+			iterm.activate();
+			return `New tab, now in front${text ? `, ran: ${text}` : ""}. iterm_read without a target reads it.`;
 		}
 		case "close": {
-			const w = windowAt(iterm, args[0]);
-			const tab = w.tabs[Number(args[1]) - 1];
+			// Closing stops what runs in the tab: never by default.
+			if (!String(args[0] || "").trim()) return "error: name the tab to close as window.tab from iterm_tabs";
+			const { tab } = tabAt(iterm, args[0]);
 			const name = tab.currentSession().name();
 			tab.close();
-			return `Closed ${args[0]}.${args[1]} ${name}`;
+			return `Closed ${args[0]} ${name}`;
 		}
 		case "interrupt": {
-			const s = sessionAt(iterm, args[0], args[1]);
+			const s = sessionAt(iterm, args[0]);
 			s.write({ text: "\u0003", newline: false });
 			return `Ctrl+C sent to ${s.name()}`;
 		}
 		default:
-			return "usage: iterm.js tabs | tab <w> <t> | read <w> <t> [lines] | run <w> <t> <command> [seconds] | new [command] | close <w> <t> | interrupt <w> <t>";
+			return "usage: iterm.js tabs | tab <target> | read <target> [lines] | run <target> <command> [seconds] | new [command] | close <target> | interrupt <target>";
 	}
 }

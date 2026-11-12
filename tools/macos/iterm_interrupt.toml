@@ -1,11 +1,7 @@
-description = "Press Ctrl+C in an iTerm2 tab, to stop a command that hangs or runs too long."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "interrupt", "{window}", "{tab}"]
+description = "Press Ctrl+C in the iTerm2 tab in front, to stop a command that hangs or runs too long."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "interrupt", "{target}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, or 0 for the front window"
-
-[params.tab]
-type = "integer"
-description = "Tab number, or 0 for the active tab"
+[params.target]
+description = "Another tab, as window.tab from iterm_tabs (for example 2.3). Leave it out: the tool works on the tab in front, which the user sees. Give it only when the user named another tab."
+required = false

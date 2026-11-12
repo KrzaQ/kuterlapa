@@ -1,11 +1,6 @@
-description = "Bring a Google Chrome tab to the front, by the numbers from chrome_tabs."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "tab", "{window}", "{tab}"]
+description = "Switch to a Google Chrome tab: the tab, its window and Chrome come to the front, so the user sees it. After that, the other chrome_* tools work on it without a target."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "tab", "{target}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, the part before the dot"
-
-[params.tab]
-type = "integer"
-description = "Tab number, the part after the dot"
+[params.target]
+description = "The tab as window.tab from chrome_tabs, for example 2.5"
