@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 anyhow = "1"
+# A git submodule (git submodule update --init).
+lejce = { path = "../lejce" }
 # bundled: SQLite is compiled in, so every system gets the same version.
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

@@ -33,7 +33,7 @@ help: ## Show this help
 		awk 'BEGIN {FS = ":.*?## "; w = 12} { k[NR] = $$1; v[NR] = $$2; if (length($$1) > w) w = length($$1) } \
 		     END { for (i = 1; i <= NR; i++) printf "  \033[36m%-*s\033[0m  %s\n", w, k[i], v[i] }'
 
-build: build/AppIcon.icns ## Build the core and the macOS app, and sign build/Kuterlapa.app
+build: lejce/Cargo.toml build/AppIcon.icns ## Build the core and the macOS app, and sign build/Kuterlapa.app
 	cd core && cargo build --release
 	swift build -c release
 	rm -rf $(APP)
@@ -50,12 +50,17 @@ build: build/AppIcon.icns ## Build the core and the macOS app, and sign build/Ku
 		$(APP)/Contents/Helpers/kuterlapa
 	codesign --force --sign '$(SIGN_IDENTITY)' --identifier '$(BUNDLE_ID)' $(APP)
 
+# The core needs Lejce, a git submodule. A clone without
+# --recurse-submodules has an empty folder; fetch it then.
+lejce/Cargo.toml:
+	git submodule update --init lejce
+
 build/AppIcon.icns: scripts/make-icon.swift
 	rm -rf build/AppIcon.iconset
 	swift scripts/make-icon.swift build/AppIcon.iconset
 	iconutil -c icns build/AppIcon.iconset -o $@
 
-test: ## Run the core's tests and check that the Python providers load
+test: lejce/Cargo.toml ## Run the core's tests and check that the Python providers load
 	cd core && cargo test
 	cd speech && python3 -c "import ast, pathlib; [compile(p.read_text(), str(p), 'exec') for p in pathlib.Path('src').rglob('*.py')]"
 	cd speech/src && python3 -c "from kuterlapa_speech.text import build_prompt, clean, context_names"

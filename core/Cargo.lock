@@ -111,10 +111,18 @@ name = "kuterlapa"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "lejce",
  "rusqlite",
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "lejce"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

@@ -29,6 +29,8 @@ Three kinds of processes, so each part can be replaced on its own
   buttons to actions and sends dictated text where it belongs. The same
   binary is also the command-line client (`kuterlapa press A`,
   `kuterlapa status`).
+- `lejce/`: [Lejce](https://github.com/KrzaQ/lejce), a git submodule. The
+  core runs the models' engines (Claude Code, pi) through it.
 - `Sources/Kuterlapa/`: the macOS shell, `Kuterlapa.app` (Swift, AppKit):
   - `Input/`: game controller buttons,
   - `Output/`: keystrokes and typed text,
@@ -62,9 +64,13 @@ Three kinds of processes, so each part can be replaced on its own
 ## Install
 
 ```bash
+git clone --recurse-submodules https://github.com/KrzaQ/kuterlapa.git
+cd kuterlapa
 make install
 make run
 ```
+
+In a clone without the submodule, `make build` fetches it first.
 
 `make install` builds `~/Applications/Kuterlapa.app` (with the core
 inside), links the `kuterlapa` command into `~/.local/bin`, installs
