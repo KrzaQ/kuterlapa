@@ -10,7 +10,7 @@ use crate::approvals;
 use crate::paths;
 use crate::profiles::Profile;
 use anyhow::{bail, Result};
-use lejce::{Activity, Answer, Engine, Host, McpServer, Question, Request, Tools};
+use lejce::{Activity, Answer, Engine, Host, McpServer, Question, Session, Setup, Tools};
 use std::path::Path;
 
 /// Stops every running model request at once: the engine, its tool server
@@ -72,19 +72,20 @@ fn run(
         bail!("unknown engine {:?} in profile {:?}", profile.engine, profile.name);
     };
     let state = paths::state_dir();
-    let request = Request {
+    let setup = Setup {
         engine,
         host: Host::Local { folder: Some(folder.unwrap_or(&state).to_path_buf()) },
         model: profile.model.clone(),
         effort: profile.effort.clone(),
         system: system.into(),
         project: folder.is_some(),
-        message: user.into(),
         tools: tools.and_then(|set| tool_list(profile, engine, set)),
+        // One message per engine: the program sends the history itself.
+        session: Session::None,
         files: state,
     };
     let ask = |question: &Question| ask(engine, question);
-    let outcome = lejce::run(&request, progress, &ask);
+    let outcome = lejce::run(&setup, user, progress, &ask);
     // Saved even when cancelled: the tokens were used.
     let session = tools.map(|t| t.session.to_string()).unwrap_or_else(crate::sessions::current_name);
     crate::usage::record(profile, &session, purpose, &outcome.activity.calls);
@@ -102,12 +103,8 @@ fn tool_list(profile: &Profile, engine: Engine, set: ToolSet) -> Option<Tools> {
     if let Some(names) = set.only {
         args.extend(["--only".into(), names.join(",")]);
     }
-    let server = McpServer {
-        name: "kuterlapa".into(),
-        command: me.to_string_lossy().into_owned(),
-        args,
-        description: Some("Kuterlapa tools: the user's devices and programs".into()),
-    };
+    let mut server = McpServer::stdio("kuterlapa", &me.to_string_lossy(), args);
+    server.description = Some("Kuterlapa tools: the user's devices and programs".into());
     // Only the Kuterlapa tools for a model that only reads. Otherwise web
     // search for Claude, and the engine's shell when the profile allows
     // it: the engine's permission classifier judges each command.
