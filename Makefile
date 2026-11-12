@@ -3,7 +3,7 @@
 # Machine-specific values (a code signing identity, for example) go in
 # Makefile.local, which git ignores. See Makefile.local.example.
 
-.PHONY: help build test speech install run stop logs hooks check-private screenshots clean
+.PHONY: help build test speech install run stop logs push hooks check-private screenshots clean
 .DEFAULT_GOAL := help
 
 # Code signing identity. "-" signs ad hoc, which works on any Mac but
@@ -25,6 +25,8 @@ VOICE_EXTRA ?=
 # Extra for the embedding provider: mlx (a local model) or empty (only an
 # OpenAI-compatible server).
 EMBED_EXTRA ?= mlx
+# The git remotes that `make push` pushes main to.
+REMOTES ?= origin
 
 APP := build/Kuterlapa.app
 
@@ -108,6 +110,9 @@ screenshots: ## Retake docs/screenshots/ with example content (Kuterlapa must ru
 
 logs: ## Follow the app log
 	tail -f $(LOG_FILE)
+
+push: ## Push main to every remote in REMOTES (default origin)
+	for r in $(REMOTES); do git push $$r main || exit 1; done
 
 hooks: ## Install the git pre-commit hook that blocks private text
 	ln -sf ../../scripts/check-private.sh .git/hooks/pre-commit

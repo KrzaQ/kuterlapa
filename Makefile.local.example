@@ -4,3 +4,6 @@
 # app's permissions across rebuilds. List them with:
 #   security find-identity -p codesigning
 SIGN_IDENTITY = <your-identity>
+
+# The git remotes that `make push` pushes main to.
+REMOTES = origin
