@@ -10,7 +10,7 @@ use crate::approvals;
 use crate::paths;
 use crate::profiles::Profile;
 use anyhow::{bail, Result};
-use lejce::{Activity, Answer, Engine, Host, McpServer, Question, Session, Setup, Tools};
+use lejce::{Activity, Answer, Engine, Host, McpServer, Permissions, Question, Session, Setup, Tools};
 use std::path::Path;
 
 /// Stops every running model request at once: the engine, its tool server
@@ -115,8 +115,15 @@ fn tool_list(profile: &Profile, engine: Engine, set: ToolSet) -> Option<Tools> {
         (Engine::Claude, false, false) => &["WebSearch", "WebFetch"],
         (Engine::Pi, false, true) => &["bash"],
         (Engine::Pi, false, false) => &[],
+        // Codex keeps its shell; "shell" lets it write in its folder.
+        (Engine::Codex, false, true) => &["shell"],
+        (Engine::Codex, false, false) => &[],
     };
-    Some(Tools { builtin: builtin.iter().map(|s| s.to_string()).collect(), servers: vec![server] })
+    Some(Tools {
+        builtin: builtin.iter().map(|s| s.to_string()).collect(),
+        servers: vec![server],
+        permissions: Permissions::Auto,
+    })
 }
 
 /// pi-censor's options, as the overlay shows them. The answer is the

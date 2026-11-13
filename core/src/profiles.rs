@@ -11,7 +11,7 @@ use std::fs;
 pub struct Profile {
     /// Shown in the overlay.
     pub name: String,
-    /// "claude" (Claude Code, `claude -p`) or "pi".
+    /// "claude" (Claude Code, `claude -p`), "pi" or "codex".
     pub engine: String,
     /// Passed to the engine's --model.
     pub model: String,
