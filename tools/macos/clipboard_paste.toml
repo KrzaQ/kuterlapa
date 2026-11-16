@@ -1,0 +1,3 @@
+description = "Paste the clipboard into the application in front (cmd+V), the way the user would: for \"wklej\" or \"paste what is in the clipboard\". Put the focus in the right field first if needed. You do not need to read the clipboard for this, and it also pastes what a password manager copied."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./clipboard.js", "paste"]
+timeout = 15

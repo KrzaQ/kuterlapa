@@ -1,0 +1,9 @@
+description = "Read what the clipboard holds: text, file names, or what kind of data. Use it when the user asks what is in the clipboard or wants you to work with it. It does not show what a password manager copied."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./clipboard.js", "read", "{chars}"]
+timeout = 15
+read_only = true
+
+[params.chars]
+type = "integer"
+description = "How much text, default 6000, at most 30000"
+required = false

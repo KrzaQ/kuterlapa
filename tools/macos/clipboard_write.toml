@@ -1,0 +1,6 @@
+description = "Put text on the clipboard, for the user to paste somewhere, or to paste it with clipboard_paste. It replaces what the clipboard held."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./clipboard.js", "write", "{text}"]
+timeout = 15
+
+[params.text]
+description = "The text"
