@@ -7,7 +7,7 @@ Kuterlapa is a menu bar app. A controller button starts dictation; local
 Whisper turns speech into text, sentence by sentence, and Kuterlapa types it
 into the active window. Other buttons talk to a language model (Claude
 through Claude Code, or a local model through pi), edit a draft by voice
-before it is sent, read answers aloud, or send keys and run commands. The
+before it is typed, read answers aloud, or send keys and run commands. The
 mapping is a JSON file.
 
 The models get tools: they can see and use the computer (screenshots, the
@@ -123,6 +123,9 @@ All in `~/.config/kuterlapa/`:
   otherwise press Escape),
   `"finish-dictation|Return"` (end the dictation, wait for its last words,
   then press Enter), or `"cmd:<shell command>"`. The app reads the file again when it changes.
+- `submit.json`: a key to press after a draft is typed, per application
+  (bundle id), for example `{"com.tinyspeck.slackmacgap": "Return"}`.
+  By default a draft is only typed, never sent.
 - `speech.toml`: Whisper model, language (empty: Whisper detects it),
   the first sentence of its context, microphone. The example shows Polish
   settings.

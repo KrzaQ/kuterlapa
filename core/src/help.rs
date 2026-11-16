@@ -154,7 +154,7 @@ fn describe(action: &Action) -> (Group, String, String) {
             (
                 Speech,
                 "wyślij · zgoda: tak",
-                format!("zakończ dyktowanie{key}; przy szkicu: wpisz go i wyślij; przy pytaniu o zgodę: tak"),
+                format!("zakończ dyktowanie{key}; przy szkicu: wpisz go (bez Entera); przy pytaniu o zgodę: tak"),
             )
         }
         Action::EraseDictation { fallback } => {

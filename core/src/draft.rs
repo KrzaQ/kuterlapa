@@ -368,9 +368,9 @@ impl Draft {
             text.push_str(s.pending.trim());
         }
         let hint = if s.text.is_empty() && s.recording {
-            "X: koniec · A: wyślij · B: anuluj"
+            "X: koniec · A: wpisz · B: anuluj"
         } else {
-            "X: popraw głosem · A: wyślij · B: odrzuć"
+            "X: popraw głosem · A: wpisz · B: odrzuć"
         };
         let mut state = json!({
             "visible": true, "title": format!("Szkic · {profile}"), "status": status, "text": text, "hint": hint,
