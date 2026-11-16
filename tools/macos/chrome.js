@@ -157,9 +157,12 @@ const FIND = (n) => `
 //     }
 //   }
 //
-// A page script gets `action`, `args` and, in a check, `result` (what the
-// script returned). It returns text for the model, or an object: its
-// "text" is the answer, and with a check the whole object goes to it.
+// A page script gets `action`, `args` and, in a check or a second round,
+// `result` (what the script returned). It returns text for the model, or an
+// object: its "text" is the answer, and with a check the whole object goes
+// to it. {"again": true, "wait": 1} runs the script again a second later
+// (at most 4 times); {"click": {"x", "y"}} clicks there with the real mouse
+// (screen points) on the tab the user sees.
 
 function readFile(path) {
 	const text = $.NSString.stringWithContentsOfFileEncodingError($(path).stringByStandardizingPath, $.NSUTF8StringEncoding, null);
@@ -230,6 +233,21 @@ return typeof out === "string" ? out : JSON.stringify(out);
 })()`;
 }
 
+/** Sends a line to Kuterlapa's app (shell.sock) and returns its answer. */
+function app(line) {
+	const env = $.NSProcessInfo.processInfo.environment.objectForKey("XDG_STATE_HOME");
+	const state = env.isNil() ? $("~/.local/state").stringByExpandingTildeInPath.js : env.js;
+	return shell(`printf '%s\\n' ${quote(line)} | nc -U -w 3 ${quote(state + "/kuterlapa/shell.sock")}`).trim();
+}
+
+/** A real key, through Kuterlapa's app, on the tab the user sees. */
+function realKey(c, tab, combo) {
+	const w = c.windows[0];
+	if (w.activeTab().id() !== tab.id() || !front().chrome) return "error: not the tab in front";
+	const answer = app(`key ${combo}`);
+	return answer === "ok" ? "ok" : `error: ${answer || "no answer from Kuterlapa"}`;
+}
+
 /** A click of the real mouse at a screen point, through Kuterlapa's app:
  * some pages (WhatsApp) ignore mouse events made in the page. Only on the
  * tab the user sees, which comes to the front first. */
@@ -239,9 +257,7 @@ function realClick(c, tab, point) {
 	w.index = 1;
 	c.activate();
 	delay(0.3);
-	const env = $.NSProcessInfo.processInfo.environment.objectForKey("XDG_STATE_HOME");
-	const state = env.isNil() ? $("~/.local/state").stringByExpandingTildeInPath.js : env.js;
-	const answer = shell(`printf 'click-points %d %d\\n' ${Math.round(point.x)} ${Math.round(point.y)} | nc -U -w 3 ${quote(state + "/kuterlapa/shell.sock")}`).trim();
+	const answer = app(`click-points ${Math.round(point.x)} ${Math.round(point.y)}`);
 	return answer === "ok" ? "ok" : `error: the click did not happen: ${answer || "no answer from Kuterlapa"}`;
 }
 
@@ -423,15 +439,21 @@ function main(argv) {
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
-  if (${submit === "submit"}) {
-    if (el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }
-    else { for (const type of ["keydown", "keypress", "keyup"]) el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, bubbles: true })); }
-  }
   return "ok";
 })()`;
 			const answer = inPage(tab, code);
 			if (answer !== "ok") return answer;
-			if (submit === "submit") return `Filled ${n} and sent the form.`;
+			if (submit === "submit") {
+				// A real Enter, as the user would press it: a page such as
+				// Gmail handles that itself, but a form sent from a script
+				// reloads the whole page. Only on the tab the user sees.
+				const sent = realKey(c, tab, "Return");
+				if (sent !== "ok") {
+					inPage(tab, `(() => { const el = document.activeElement; for (const type of ["keydown", "keypress", "keyup"]) el && el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, bubbles: true })); return "ok"; })()`);
+					return `Filled ${n} and pressed Enter in the page (not the tab in front, so no real key).`;
+				}
+				return `Filled ${n} and pressed Enter.`;
+			}
 			// Read the field back a moment later: a page can change it again.
 			delay(0.4);
 			const shown = inPage(tab, `(() => {${FIND(n)}
@@ -479,9 +501,17 @@ function main(argv) {
 			}
 			const missing = Object.keys(action.params || {}).filter((p) => given[p] === undefined || given[p] === "");
 			if (missing.length) return `error: ${name} needs ${missing.join(", ")}`;
-			const first = inPage(tab, pageScript(pack, action.script, name, given));
+			let first = inPage(tab, pageScript(pack, action.script, name, given));
 			if (first.startsWith("error:")) return first;
-			const answer = answerOf(first);
+			let answer = answerOf(first);
+			// A script may ask to run again a moment later, with its answer
+			// as `result`: after it typed a search, to read the results.
+			for (let round = 0; answer.again && round < 4; round++) {
+				delay(Number(answer.wait) || 1);
+				first = inPage(tab, pageScript(pack, action.script, name, given, answer));
+				if (first.startsWith("error:")) return first;
+				answer = answerOf(first);
+			}
 			if (answer.error) return `error: ${answer.error}`;
 			if (answer.click) {
 				const done = realClick(c, tab, answer.click);

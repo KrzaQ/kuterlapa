@@ -13,4 +13,16 @@ const items = [...document.querySelectorAll("#pane-side [role=row]")].map((row) 
     open: !!row.querySelector("[aria-selected=true]"),
   };
 }).filter((i) => i.name);
-return chatAction("WhatsApp", items);
+// The search box above the list: typed text filters chats, contacts and
+// messages, and the list shows the results.
+function search(name) {
+  const box = document.querySelector('#side input[type="text"], #side [contenteditable="true"]');
+  if (!box) return false;
+  box.focus();
+  // As if typed: select what is there and insert, which fires the events
+  // the page listens to.
+  if (box.select) box.select(); else document.execCommand("selectAll");
+  document.execCommand("insertText", false, name);
+  return true;
+}
+return chatAction("WhatsApp", items, search);
