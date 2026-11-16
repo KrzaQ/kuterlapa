@@ -107,6 +107,15 @@ pub fn run(args: &[String]) -> Result<()> {
                     }, "required": ["text"] },
                 }));
                 list.push(json!({
+                    "name": "narrator_voice",
+                    "description": "The voice Kuterlapa's narrator reads answers with. Without a name: \
+                                    the voices, with the chosen one. With a name: read with that voice \
+                                    from now on. Use it when the user asks for another narrator or voice.",
+                    "inputSchema": { "type": "object", "properties": {
+                        "name": { "type": "string", "description": "A voice from the list; leave it out to list them" },
+                    } },
+                }));
+                list.push(json!({
                     "name": "usage_stats",
                     "description": "How many tokens the models used through Kuterlapa, per model: answers, \
                                     draft corrections and pi-censor's classifier, with cache reads and \
@@ -299,6 +308,17 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
             Ok(decoded) => (crate::spell::describe(&decoded, &language), true),
             Err(e) => (format!("error: {e:#}"), false),
         };
+        return result(text, ok);
+    }
+    if name == "narrator_voice" {
+        let text = match arguments.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()) {
+            Some(voice) => match crate::voice::choose(voice) {
+                answer if answer == "ok" => format!("The narrator reads with {voice} now."),
+                answer => answer,
+            },
+            None => crate::voice::list(),
+        };
+        let ok = !text.starts_with("error");
         return result(text, ok);
     }
     if name == "usage_stats" {

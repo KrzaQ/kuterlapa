@@ -13,7 +13,10 @@ def _base(variable, fallback):
 
 CONFIG = _base("XDG_CONFIG_HOME", ".config")
 STATE = _base("XDG_STATE_HOME", ".local/state")
+DATA = _base("XDG_DATA_HOME", ".local/share")
 VOICE_SOCKET = STATE / "voice.sock"
+# The voice the user chose last (its name), kept across restarts.
+VOICE_FILE = STATE / "voice"
 CORE_SOCKET = STATE / "core.sock"
 
 
@@ -24,8 +27,14 @@ class Settings:
     # say: the macOS voice name; empty means the system default.
     say_voice: str = ""
     # command: the program and its arguments. It gets the text on stdin and
-    # writes a WAV file to stdout.
+    # writes a WAV file to stdout. "{ref_audio}" and "{ref_text}" in an
+    # argument become the files of the chosen voice (see voices).
     command: list[str] = field(default_factory=list)
+    # Voices to clone, in a folder: <name>.wav (a clip of 10 to 30 seconds
+    # of one person) and <name>.txt (exactly what the clip says). The user
+    # picks one in the overlay; `voice` is the one before any choice.
+    voices: str = str(DATA / "voices")
+    voice: str = ""
     # mlx: a model id or folder, and optionally a reference clip to clone
     # with the text spoken in it.
     model: str = ""

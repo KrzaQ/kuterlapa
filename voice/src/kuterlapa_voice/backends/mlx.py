@@ -20,6 +20,9 @@ class Backend:
             self.kw["ref_audio"] = settings.ref_audio
             self.kw["ref_text"] = _read_text(settings.ref_text)
 
+    def set_voice(self, ref_audio, ref_text):
+        self.kw = {"ref_audio": ref_audio, "ref_text": _read_text(ref_text)}
+
     def synthesize(self, text):
         chunks = [np.asarray(r.audio, dtype=np.float32) for r in self.model.generate(text=text, **self.kw)]
         audio = np.concatenate(chunks) if chunks else np.zeros(0, np.float32)

@@ -66,6 +66,8 @@ pub enum Action {
     View,
     /// Choose the microphone: the system's default input, or another.
     Microphone,
+    /// Choose the narrator's voice.
+    NarratorVoice,
 }
 
 impl Action {
@@ -84,6 +86,7 @@ impl Action {
             "claude-ask" => return Some(Action::ClaudeAsk),
             "view" => return Some(Action::View),
             "microphone" => return Some(Action::Microphone),
+            "narrator-voice" => return Some(Action::NarratorVoice),
             _ => {}
         }
         if spec == "draft" {

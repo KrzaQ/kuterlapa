@@ -10,14 +10,22 @@ backend = "say"
 say_voice = ""
 
 # command: a program that gets the text on stdin and writes a 16-bit WAV to
-# stdout. Use it for a speech service you already run.
-# command = ["~/bin/my-tts", "--voice", "narrator"]
+# stdout. Use it for a speech service you already run. "{ref_audio}" and
+# "{ref_text}" become the files of the chosen voice (see voices below).
+# command = ["~/bin/my-tts", "{ref_audio}", "{ref_text}"]
 
 # mlx: a model id or folder. With ref_audio and ref_text (the text spoken in
 # the clip, or a path to a file with it) the model clones that voice.
 # model = "~/models/fish-audio-drama-3-4bit"
 # ref_audio = "~/.local/share/kuterlapa/voices/narrator.wav"
 # ref_text = "~/.local/share/kuterlapa/voices/narrator.txt"
+
+# Voices to clone: <name>.wav (10 to 30 seconds of one person, no noise)
+# and <name>.txt (exactly what the clip says) in this folder. The
+# narrator-voice button and the narrator_voice tool choose one; voice is
+# the one before any choice.
+voices = "~/.local/share/kuterlapa/voices"
+voice = ""
 
 # The first piece is short, so speech starts soon; later pieces are made
 # while earlier ones play.

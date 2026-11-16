@@ -125,6 +125,8 @@ All in `~/.config/kuterlapa/`:
   tab, in the overlay, without a model),
   `"microphone"` (choose the microphone: the system's default input, or
   another one, kept until changed),
+  `"narrator-voice"` (choose the narrator's voice from the clips in
+  `voices`),
   `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation; during a dictation, only end it;

@@ -275,6 +275,16 @@ fn act(state: &Arc<State>, button: &str) -> String {
             }
             "ok".into()
         }
+        Action::NarratorVoice => {
+            // The question waits for the d-pad and A, so it runs on its own.
+            in_background(state, |state| {
+                let note = voice::choose_in_overlay(|| state.chat.refresh());
+                if !note.is_empty() {
+                    state.chat.note(&note);
+                }
+            });
+            "ok".into()
+        }
         Action::Microphone => {
             // The question waits for the d-pad and A, so it runs on its own.
             in_background(state, |state| {

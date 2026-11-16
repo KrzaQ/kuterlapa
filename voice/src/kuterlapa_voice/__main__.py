@@ -6,6 +6,8 @@ It implements the voice protocol (docs/protocol.md) and listens on
     say <text>   read the text aloud, after anything still being read
     stop         stop reading and drop what is waiting
     status       "speaking" or "idle"
+    voices       the voices to clone, as JSON: {"chosen": <name>, "voices": [<names>]}
+    voice <name> read with this voice from now on; kept across restarts
 
 The text is split into pieces (pieces.py). One thread makes pieces with
 the backend, another plays them, so the next piece is ready when the
@@ -20,6 +22,7 @@ the provider exits.
 """
 
 import datetime
+import json
 import os
 import queue
 import socket
@@ -59,6 +62,45 @@ def report(speaking):
     """Tell the core that speech started or stopped. One thread sends the
     reports in order, so "off" never overtakes "on"."""
     _states.put(f"state speaking {'on' if speaking else 'off'}")
+
+
+class Voices:
+    """The voices to clone: <name>.wav and <name>.txt in a folder, and the
+    chosen one, which the backend reads with."""
+
+    def __init__(self, backend, settings):
+        self.backend = backend
+        self.folder = settings.voices
+        try:
+            chosen = config.VOICE_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            chosen = settings.voice
+        names = self.names()
+        self.chosen = chosen if chosen in names else (names[0] if names else "")
+        self._apply()
+
+    def names(self):
+        try:
+            files = os.listdir(self.folder)
+        except OSError:
+            return []
+        wavs = {f[:-4] for f in files if f.endswith(".wav")}
+        return sorted(n for n in wavs if f"{n}.txt" in files)
+
+    def choose(self, name):
+        if name not in self.names():
+            return f"error: no voice {name!r}; voices: {', '.join(self.names())}"
+        self.chosen = name
+        config.VOICE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.VOICE_FILE.write_text(name + "\n", encoding="utf-8")
+        self._apply()
+        log(f"voice: {name}")
+        return "ok"
+
+    def _apply(self):
+        if self.chosen and hasattr(self.backend, "set_voice"):
+            base = os.path.join(self.folder, self.chosen)
+            self.backend.set_voice(base + ".wav", base + ".txt")
 
 
 class Reader:
@@ -123,7 +165,7 @@ class Reader:
             self._done()
 
 
-def serve(reader):
+def serve(reader, voices):
     sock = config.VOICE_SOCKET
     sock.parent.mkdir(parents=True, exist_ok=True)
     if sock.exists():
@@ -152,6 +194,10 @@ def serve(reader):
                 answer = "ok"
             elif verb == "status":
                 answer = "speaking" if reader.speaking() else "idle"
+            elif verb == "voices":
+                answer = json.dumps({"chosen": voices.chosen, "voices": voices.names()}, ensure_ascii=False)
+            elif verb == "voice":
+                answer = voices.choose(text.strip())
             else:
                 answer = f"error: unknown request {verb}"
             conn.sendall((answer + "\n").encode())
@@ -173,7 +219,7 @@ def main():
     log(f"loading backend {settings.backend}")
     backend = backends.load(settings)
     log("ready")
-    serve(Reader(backend, settings))
+    serve(Reader(backend, settings), Voices(backend, settings))
 
 
 if __name__ == "__main__":
