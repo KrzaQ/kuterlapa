@@ -209,12 +209,27 @@ class Dictation:
             else:
                 self.pre_roll.append(frame)
 
+        # PortAudio learns the devices, and which is the default, once at
+        # start. Headphones that connect or leave later change the system's
+        # default input, and the provider kept recording from the old one,
+        # which gave silence. With no stream open, start PortAudio again so
+        # it sees the devices as they are now.
+        if self.stream is None:
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception as e:  # noqa: BLE001 - keep the old list then
+                log(f"audio: cannot reload the device list: {e}")
         self.stream = sd.InputStream(
             samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
             device=self.settings.microphone or None, callback=on_audio,
         )
         self.stream.start()
-        log("microphone open")
+        try:
+            name = sd.query_devices(self.stream.device, "input")["name"]
+        except Exception:  # noqa: BLE001 - the name is only for the log
+            name = "?"
+        log(f"microphone open: {name}")
 
     def toggle(self):
         with self.lock:
@@ -268,6 +283,11 @@ class Dictation:
         elif not self.stream.active:
             # The device went away (for example a headset), so open it again.
             log("microphone stream stopped; opening it again")
+            try:
+                self.stream.close()
+            except Exception:  # noqa: BLE001 - it is gone already
+                pass
+            self.stream = None
             self._open_stream()
         for frame in list(self.pre_roll):
             self.frames.put(frame)
