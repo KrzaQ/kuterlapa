@@ -549,7 +549,7 @@ impl Chat {
         let status = if let Some(note) = &s.note {
             note.clone()
         } else if s.recording {
-            "Słucham…".into()
+            listening()
         } else if s.busy {
             match &s.activity {
                 Some(a) => {
@@ -799,4 +799,13 @@ fn tool_count(n: usize) -> String {
         _ => "narzędzi",
     };
     format!("{n} {word}")
+}
+
+/// "Słucham…", with the microphone when the user chose one: then the
+/// system's default input is not what records.
+fn listening() -> String {
+    match crate::microphone::chosen() {
+        Some(name) => format!("Słucham… · 🎙 {name}"),
+        None => "Słucham…".into(),
+    }
 }

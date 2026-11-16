@@ -64,6 +64,8 @@ pub enum Action {
     ClaudeAsk,
     /// Open the large chat view, or close it.
     View,
+    /// Choose the microphone: the system's default input, or another.
+    Microphone,
 }
 
 impl Action {
@@ -81,6 +83,7 @@ impl Action {
             "usage" => return Some(Action::Usage),
             "claude-ask" => return Some(Action::ClaudeAsk),
             "view" => return Some(Action::View),
+            "microphone" => return Some(Action::Microphone),
             _ => {}
         }
         if spec == "draft" {

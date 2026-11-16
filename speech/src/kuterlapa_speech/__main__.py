@@ -16,6 +16,13 @@ line per connection:
     finish   stop recording and answer once the last piece is sent:
              "stopped", or "idle" if it was not recording
     status   "recording" or "idle"
+    devices  the microphones, as JSON: {"system": <the system's default
+             input>, "chosen": <the chosen one, "" to follow the system>,
+             "inputs": [<names>]}
+    microphone <name>
+             record from this microphone from now on; without a name,
+             follow the system's default input again. The choice is kept
+             in ~/.local/state/kuterlapa/microphone.
 
 While recording, it cuts the audio at pauses in speech. Each piece goes to
 Whisper at once, and the text goes to the Kuterlapa core
@@ -29,6 +36,7 @@ the provider exits.
 
 import collections
 import datetime
+import json
 import os
 import queue
 import socket
@@ -82,6 +90,20 @@ threading.Thread(target=_send_states, daemon=True).start()
 def tell_core(line):
     """Send a request to the core from the reporting thread, in order."""
     _states.put(line)
+
+
+# The user's choice of microphone: a name, or empty to follow the system.
+MICROPHONE_FILE = config.STATE / "microphone"
+
+
+def inputs():
+    """The names of the input devices, and the system's default input."""
+    names = [d["name"] for d in sd.query_devices() if d["max_input_channels"] > 0]
+    try:
+        system = sd.query_devices(kind="input")["name"]
+    except Exception:  # noqa: BLE001 - no default input at all
+        system = ""
+    return names, system
 
 
 def report(listening):
@@ -220,9 +242,10 @@ class Dictation:
                 sd._initialize()
             except Exception as e:  # noqa: BLE001 - keep the old list then
                 log(f"audio: cannot reload the device list: {e}")
+        device = self._device()
         self.stream = sd.InputStream(
             samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
-            device=self.settings.microphone or None, callback=on_audio,
+            device=device, callback=on_audio,
         )
         self.stream.start()
         try:
@@ -230,6 +253,46 @@ class Dictation:
         except Exception:  # noqa: BLE001 - the name is only for the log
             name = "?"
         log(f"microphone open: {name}")
+
+    def chosen_microphone(self):
+        """The chosen microphone's name; empty follows the system."""
+        try:
+            return MICROPHONE_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            return self.settings.microphone or ""
+
+    def _device(self):
+        """The chosen microphone, or None (the system's) when it is not
+        there, with a note for the user."""
+        chosen = self.chosen_microphone()
+        if not chosen:
+            return None
+        # By index: sounddevice takes a name as a part of one, and "Mic"
+        # would fit several devices.
+        for index, d in enumerate(sd.query_devices()):
+            if d["name"] == chosen and d["max_input_channels"] > 0:
+                return index
+        _names, system = inputs()
+        log(f"microphone {chosen!r} is not there; recording from the system's: {system}")
+        tell_core(f"note Mikrofon „{chosen}” niedostępny — nagrywam z systemowego ({system})")
+        return None
+
+    def devices(self):
+        names, system = inputs()
+        return json.dumps({"system": system, "chosen": self.chosen_microphone(), "inputs": names}, ensure_ascii=False)
+
+    def set_microphone(self, name):
+        """Record from `name` from the next recording on ("" follows the
+        system). An open stream closes now, unless it records."""
+        MICROPHONE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MICROPHONE_FILE.write_text(name + "\n", encoding="utf-8")
+        log(f"microphone chosen: {name or 'the system default'}")
+        with self.lock:
+            if self.recording or self.stream is None:
+                return
+            stream, self.stream = self.stream, None
+            self.pre_roll.clear()
+        threading.Thread(target=lambda: (stream.abort(), stream.close()), daemon=True).start()
 
     def toggle(self):
         with self.lock:
@@ -420,6 +483,13 @@ def serve(dictation):
                 state = "recording" if dictation.recording else "idle"
                 conn.sendall(f"{state}\n".encode())
             continue
+        if cmd == "devices":
+            with conn:
+                try:
+                    conn.sendall((dictation.devices() + "\n").encode())
+                except Exception as e:  # noqa: BLE001 - answer with the error
+                    conn.sendall(f"error: {e}\n".encode())
+            continue
         if cmd == "finish":
             # Answered only when done; its own thread, so other requests
             # (and the pieces still on their way) are not blocked.
@@ -437,6 +507,9 @@ def serve(dictation):
             threading.Thread(target=dictation.start_auto, daemon=True).start()
         elif cmd == "cancel":
             threading.Thread(target=dictation.cancel, daemon=True).start()
+        elif cmd == "microphone" or cmd.startswith("microphone "):
+            name = cmd[len("microphone"):].strip()
+            threading.Thread(target=dictation.set_microphone, args=(name,), daemon=True).start()
         else:
             log(f"unknown request: {cmd!r}")
 

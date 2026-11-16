@@ -19,6 +19,7 @@
   "ZL": "previous-profile",
   "+": "new-conversation",
   "-": "voice-stop",
+  "- hold": "microphone",
   "R": "click",
   "R hold": "right-click",
   "+ double": "help",

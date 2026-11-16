@@ -275,6 +275,16 @@ fn act(state: &Arc<State>, button: &str) -> String {
             }
             "ok".into()
         }
+        Action::Microphone => {
+            // The question waits for the d-pad and A, so it runs on its own.
+            in_background(state, |state| {
+                let note = crate::microphone::choose(|| state.chat.refresh());
+                if !note.is_empty() {
+                    state.chat.note(&note);
+                }
+            });
+            "ok".into()
+        }
         Action::Sessions => {
             if !hide_help(state) {
                 show_panel(state, &sessions::panel());

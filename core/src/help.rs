@@ -181,6 +181,7 @@ fn describe(action: &Action) -> (Group, String, String) {
         Action::Sessions => (Model, "ostatnie sesje", "pokaż albo schowaj ostatnio używane sesje".into()),
         Action::Usage => (Model, "zużycie tokenów", "pokaż albo schowaj dzisiejsze zużycie modeli".into()),
         Action::ClaudeAsk => (Model, "pytanie Claude Code", "odpowiedz na pytanie Claude Code z bieżącej karty iTerma".into()),
+        Action::Microphone => (Model, "mikrofon", "wybierz mikrofon: systemowy albo inny (↑ ↓, A wybiera)".into()),
         Action::View => (
             Model,
             "widok czatu",

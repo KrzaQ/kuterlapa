@@ -349,7 +349,7 @@ impl Draft {
         let status = if let Some(note) = &s.note {
             note.clone()
         } else if s.recording {
-            "Słucham…".to_string()
+            listening()
         } else if s.busy {
             match &s.working_on {
                 Some(instruction) => format!("{profile} poprawia szkic: „{}”", short(instruction, 120)),
@@ -398,5 +398,14 @@ fn short(text: &str, count: usize) -> String {
         format!("{}…", line.chars().take(count - 1).collect::<String>())
     } else {
         line
+    }
+}
+
+/// "Słucham…", with the microphone when the user chose one: then the
+/// system's default input is not what records.
+fn listening() -> String {
+    match crate::microphone::chosen() {
+        Some(name) => format!("Słucham… · 🎙 {name}"),
+        None => "Słucham…".into(),
     }
 }

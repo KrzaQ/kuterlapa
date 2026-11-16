@@ -123,6 +123,8 @@ All in `~/.config/kuterlapa/`:
   `"help"`, `"sessions"`, `"view"`, `"usage"` (today's token statistics),
   `"claude-ask"` (answer the question of the Claude Code in iTerm's front
   tab, in the overlay, without a model),
+  `"microphone"` (choose the microphone: the system's default input, or
+  another one, kept until changed),
   `"previous-profile"`, `"click"`, `"double-click"`, `"right-click"`, a key combination
   (`"Return"`, `"ctrl+Left"`), `"speech:toggle"`, `"erase-dictation|Escape"`
   (erase the text of the last dictation; during a dictation, only end it;
