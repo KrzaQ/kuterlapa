@@ -222,6 +222,21 @@ return typeof out === "string" ? out : JSON.stringify(out);
 })()`;
 }
 
+/** A click of the real mouse at a screen point, through Kuterlapa's app:
+ * some pages (WhatsApp) ignore mouse events made in the page. Only on the
+ * tab the user sees, which comes to the front first. */
+function realClick(c, tab, point) {
+	const w = c.windows[0];
+	if (w.activeTab().id() !== tab.id()) return "error: this action clicks, so it works only on the tab the user sees; switch to it with chrome_tab";
+	w.index = 1;
+	c.activate();
+	delay(0.3);
+	const env = $.NSProcessInfo.processInfo.environment.objectForKey("XDG_STATE_HOME");
+	const state = env.isNil() ? $("~/.local/state").stringByExpandingTildeInPath.js : env.js;
+	const answer = shell(`printf 'click-points %d %d\\n' ${Math.round(point.x)} ${Math.round(point.y)} | nc -U -w 3 ${quote(state + "/kuterlapa/shell.sock")}`).trim();
+	return answer === "ok" ? "ok" : `error: the click did not happen: ${answer || "no answer from Kuterlapa"}`;
+}
+
 function answerOf(text) {
 	if (text.startsWith("{")) {
 		try {
@@ -449,7 +464,12 @@ function main(argv) {
 			const first = inPage(tab, pageScript(pack, action.script, name, given));
 			if (first.startsWith("error:")) return first;
 			const answer = answerOf(first);
-			if (!action.check || answer.error) return answer.error ? `error: ${answer.error}` : (answer.text ?? first);
+			if (answer.error) return `error: ${answer.error}`;
+			if (answer.click) {
+				const done = realClick(c, tab, answer.click);
+				if (done !== "ok") return done;
+			}
+			if (!action.check) return answer.text ?? first;
 			delay(Number(action.wait) || 1);
 			const checked = inPage(tab, pageScript(pack, action.check, name, given, answer));
 			if (checked.startsWith("error:")) return checked;

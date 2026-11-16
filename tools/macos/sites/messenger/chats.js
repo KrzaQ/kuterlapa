@@ -8,4 +8,4 @@ const items = [...document.querySelectorAll("[role=row] a[href]")]
       open: a.getAttribute("aria-current") === "page" };
   })
   .filter((i) => i.name);
-return chatAction("Messenger", items, (el) => el.click());
+return chatAction("Messenger", items);

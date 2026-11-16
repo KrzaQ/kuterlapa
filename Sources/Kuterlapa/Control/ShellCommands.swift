@@ -29,6 +29,9 @@ import AppKit
 ///   focus-element <n>         put the keyboard focus in element n
 ///   fill <n> <text>           focus element n, replace its text with text
 ///   click <x> <y> [how]       click, double-click or right-click at a point
+///                             of the model's screenshot
+///   click-points <x> <y>      click at a point in screen points (for tool
+///                             scripts that know where an element is)
 ///   scroll <x> <y> <dx> <dy>  scroll at a point by pixels
 ///   apps                      running applications, "*" in front
 ///   activate <name>           bring an application to the front, or open it
@@ -131,6 +134,10 @@ enum ShellCommands {
                 return "error: usage: click <x> <y> [click|double-click|right-click]"
             }
             return Computer.click(at: Computer.point(x, y), how: words.count > 2 ? words[2] : "click")
+        case "click-points":
+            let n = argument.split(separator: " ").compactMap { Double($0) }
+            guard n.count == 2 else { return "error: usage: click-points <x> <y>" }
+            return Computer.click(at: CGPoint(x: n[0], y: n[1]), how: "click")
         case "scroll":
             let n = argument.split(separator: " ").compactMap { Double($0) }
             guard n.count == 4 else { return "error: usage: scroll <x> <y> <dx> <dy>" }

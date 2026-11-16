@@ -44,8 +44,23 @@ function chatLines(items) {
   }).join("\n") || "No conversations shown.";
 }
 
+// The middle of an element in screen points, for a real click. Chrome's
+// outer size is in points and its inner size in CSS pixels, so their ratio
+// is the page zoom; the difference in height is the toolbar.
+function screenPoint(el) {
+  const r = el.getBoundingClientRect();
+  const zoom = window.outerWidth / window.innerWidth;
+  const toolbar = window.outerHeight - window.innerHeight * zoom;
+  return {
+    x: Math.round(window.screenX + (r.left + r.width / 2) * zoom),
+    y: Math.round(window.screenY + toolbar + (r.top + r.height / 2) * zoom),
+  };
+}
+
 // The answer of list_chats and open_chat, the same for every chat site.
-function chatAction(site, items, open) {
+// open_chat asks for a real click (chrome.js does it): WhatsApp ignores
+// mouse events made in the page.
+function chatAction(site, items) {
   if (action === "list_chats") return `${site}, the list on screen (* is open):\n${chatLines(items)}`;
   const found = pickByName(items, args.name);
   if (found.choices) {
@@ -55,8 +70,7 @@ function chatAction(site, items, open) {
     return { error: `no conversation like "${args.name}" in the list on screen:\n${chatLines(items)}\nIf the person is not there, search with chrome_fields and chrome_fill.` };
   }
   found.pick.el.scrollIntoView({ block: "center" });
-  open(found.pick.el);
-  return { site, opened: found.pick.name };
+  return { site, opened: found.pick.name, click: screenPoint(found.pick.el) };
 }
 
 // The check after open_chat: does the page show that conversation now?
