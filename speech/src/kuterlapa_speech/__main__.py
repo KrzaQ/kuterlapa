@@ -420,27 +420,46 @@ class Dictation:
             self.pieces.put(piece)
         self.pieces.put(None)
 
+    def _prompt(self, language):
+        """Whisper's context for a piece in this language. The intro is
+        written in the main language, and the last text in its own: in
+        another language, either pulls Whisper into translating."""
+        s = self.settings
+        main = s.languages[0] if s.languages else (s.language or None)
+        intro = s.prompt_intro if language == main or not s.languages else ""
+        last = self.last_text if language == self.last_language or not s.languages else ""
+        return build_prompt(intro, self.dictionaries, last, self.context)
+
+    def _recognize(self, piece):
+        """The language and the text of a piece.
+
+        With several languages, Whisper's guess decides when it is the main
+        language. A guess of another one is checked: Whisper took Polish
+        speech for English with 92% certainty. The piece is then recognized
+        in both, and the surer text wins (English read as Polish, or Polish
+        as English, comes out with a much lower score).
+        """
+        s = self.settings
+        if len(s.languages) > 1:
+            guess = self.backend.detect(piece, s.languages)
+            candidates = [guess] if guess == s.languages[0] else [guess, s.languages[0]]
+            best = None
+            for language in candidates:
+                text, score = self.backend.transcribe_scored(piece, language, self._prompt(language))
+                if best is None or score > best[2]:
+                    best = (language, text, score)
+            return best[0], best[1]
+        language = s.languages[0] if s.languages else (s.language or None)
+        return language, self.backend.transcribe(piece, language, self._prompt(language))
+
     def _transcribe(self):
         s = self.settings
         while (piece := self.pieces.get()) is not None:
             if self.cancelled:
                 continue
             t = time.time()
-            language, intro, last = s.language or None, s.prompt_intro, self.last_text
             try:
-                if len(s.languages) > 1:
-                    language = self.backend.detect(piece, s.languages)
-                    # The intro is written in the main language, and the last
-                    # text in its own: in another language, either pulls
-                    # Whisper into translating the speech.
-                    if language != s.languages[0]:
-                        intro = ""
-                    if language != self.last_language:
-                        last = ""
-                elif len(s.languages) == 1:
-                    language = s.languages[0]
-                prompt = build_prompt(intro, self.dictionaries, last, self.context)
-                raw = self.backend.transcribe(piece, language, prompt)
+                language, raw = self._recognize(piece)
             except Exception as e:  # keep the provider alive on a bad piece
                 log(f"transcription failed: {e}")
                 play(s.sound_error)

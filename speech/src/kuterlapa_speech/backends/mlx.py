@@ -24,14 +24,21 @@ class Backend:
         return max(allowed, key=lambda language: probs.get(language, 0.0))
 
     def transcribe(self, audio, language, prompt):
+        return self.transcribe_scored(audio, language, prompt)[0]
+
+    def transcribe_scored(self, audio, language, prompt):
+        """The text, and how sure Whisper is of it: the mean log
+        probability of its tokens (higher is surer)."""
         result = self.model.generate(
-            audio, language=language, initial_prompt=prompt,
+            audio, language=language, initial_prompt=prompt or None,
             # Against hallucinations: do not feed the model its own earlier
             # output, and skip long silent gaps.
             condition_on_previous_text=False,
             word_timestamps=True, hallucination_silence_threshold=2.0,
         )
-        return result.text.strip()
+        segments = result.segments or []
+        scores = [s.get("avg_logprob", 0.0) for s in segments]
+        return result.text.strip(), (sum(scores) / len(scores) if scores else -10.0)
 
 
 def load(model):
