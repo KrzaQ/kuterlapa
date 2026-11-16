@@ -4,8 +4,10 @@
 //   tabs                       windows and their tabs; * marks the active tab
 //   tab <target>               bring that tab, its window and Chrome to the
 //                              front
-//   close <window> <tab>...    close tabs of one window (cmd+shift+t in
-//                              Chrome brings a tab back)
+//   close [targets] [yes]      close the tab the user sees, or the given
+//                              tabs ("1.5 1.7"); tabs other than the one in
+//                              front need "yes" (cmd+shift+t brings a tab
+//                              back)
 //   open <url> [profile] [new|tab] open the address in a new tab of the
 //                              front window, or only list the site's tabs
 //                              when it is open already; with a profile
@@ -135,6 +137,10 @@ function main(argv) {
 		case "tabs": {
 			if (!c.running()) return "Chrome is not running.";
 			const out = [];
+			if (c.windows().length) {
+				const w = c.windows[0];
+				out.push(`The user sees: [1.${w.activeTabIndex()}] ${w.activeTab().title().slice(0, 80)}`);
+			}
 			c.windows().forEach((w, i) => {
 				const active = w.activeTabIndex();
 				const tabs = w.tabs();
@@ -161,18 +167,36 @@ function main(argv) {
 			return `Tab ${target}: ${w.activeTab().title()}, now in front.`;
 		}
 		case "close": {
-			const w = c.windows[Number(args[0]) - 1];
-			// Close from the highest number down, so the numbers of the
-			// tabs still to close stay right.
-			// The numbers may come as one argument: "2 3 4" or "2,3,4".
-			const tabs = args.slice(1).join(" ").split(/[\s,]+/).map(Number).filter((n) => n > 0).sort((a, b) => b - a);
+			// No tabs: the tab the user sees. Others only with "yes": a model
+			// once closed the tab it had worked in, while the user meant the
+			// new one in front.
+			const [list, sure] = args;
+			const w1 = windowAt(c, 0);
+			const front = [1, w1.activeTabIndex()];
+			const wanted = String(list || "").trim()
+				? String(list).trim().split(/[\s,]+/).map(parseTarget)
+				: [front];
+			const others = wanted.filter(([w, t]) => !(w === 1 && t === front[1]) && !(w === 0 && t === 0));
+			if (others.length && sure !== "yes") {
+				const names = others.map(([w, t]) => {
+					const win = windowAt(c, w);
+					return `${w}.${t} ${t >= 1 && t <= win.tabs.length ? win.tabs[t - 1].title() : "(no such tab)"}`;
+				});
+				return `error: not the tab the user sees (${front.join(".")} ${w1.activeTab().title()}): ${names.join("; ")}. ` +
+					"\"This tab\" means the one the user sees: call chrome_close without tabs. To close the others, ask the user first (ask_user), then call again with confirm = \"yes\".";
+			}
+			// Highest numbers first, so the numbers still to close stay right.
+			const resolved = wanted.map(([w, t]) => (w === 0 && t === 0 ? front : [w, t]))
+				.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
 			const closed = [];
-			for (const n of tabs) {
-				const tab = w.tabs[n - 1];
-				closed.push(`${args[0]}.${n} ${tab.title()}`);
+			for (const [w, t] of resolved) {
+				const win = windowAt(c, w);
+				if (t < 1 || t > win.tabs.length) { closed.push(`${w}.${t}: no such tab`); continue; }
+				const tab = win.tabs[t - 1];
+				closed.push(`${w}.${t} ${tab.title()}`);
 				tab.close();
 			}
-			return closed.length ? `Closed:\n${closed.join("\n")}` : "No tabs given.";
+			return `Closed:\n${closed.join("\n")}`;
 		}
 		case "open": {
 			const [url, profile, how] = args;
@@ -285,6 +309,6 @@ function main(argv) {
 			return answer.startsWith("ok") ? `Clicked ${n} ${answer.slice(4)}.` : answer;
 		}
 		default:
-			return "usage: chrome.js tabs | tab <target> | close <w> <t>... | open <url> [profile] [new|tab] | profiles | read <target> [chars] | fields <target> | fill <target> <n> <text> [submit] | click <target> <n>";
+			return "usage: chrome.js tabs | tab <target> | close [targets] [yes] | open <url> [profile] [new|tab] | profiles | read <target> [chars] | fields <target> | fill <target> <n> <text> [submit] | click <target> <n>";
 	}
 }

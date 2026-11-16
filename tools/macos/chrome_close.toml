@@ -1,10 +1,11 @@
-description = "Close Google Chrome tabs of one window, by the numbers from chrome_tabs (for example duplicates). Check the numbers with chrome_tabs first; they change after closing."
-command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "close", "{window}", "{tabs}"]
+description = "Close Google Chrome tabs. Without tabs it closes the tab the user sees: that is what \"close this tab\" means, even right after you worked in another tab. Closing any other tab needs confirm = \"yes\", and only after the user said which (ask_user when unsure). Cmd+Shift+T in Chrome brings a closed tab back."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "close", "{tabs}", "{confirm}"]
 timeout = 20
 
-[params.window]
-type = "integer"
-description = "Window number, the part before the dot"
-
 [params.tabs]
-description = "Tab numbers in that window, the part after the dot, separated by spaces, for example \"2 3 4\""
+description = "Tabs as window.tab from chrome_tabs, separated by spaces, for example \"1.4 1.7\". Leave it out for the tab the user sees."
+required = false
+
+[params.confirm]
+description = "\"yes\" to close tabs other than the one the user sees, after the user agreed"
+required = false

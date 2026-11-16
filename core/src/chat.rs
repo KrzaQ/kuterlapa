@@ -647,6 +647,8 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          do śledzenia. Narzędzia iterm_* i chrome_* bez parametru target działają na karcie, którą \
          użytkownik widzi; inną kartę podawaj tylko wtedy, gdy użytkownik ją wskazał. Gdy użytkownik \
          chce gdzieś przejść, przełącz kartę (iterm_tab, chrome_tab): okno przyjdzie wtedy na wierzch. \
+         „Ta karta” to zawsze karta, którą użytkownik widzi teraz, nawet jeśli przed chwilą pracowałeś \
+         w innej: użytkownik mógł kliknąć link. \
          Tmuxa obsługuj narzędziami tmux_*, nie wpisuj poleceń tmux w iTerma: „ten tmux” \
          to sesja w aktywnej karcie iTerma (tmux_do bez hosta), a „wejdź / zaloguj się do sesji X” \
          otwiera ją tmux_attach. Gdy nie wiadomo, czy chodzi o sesję tmuxa, czy o logowanie gdzie \
