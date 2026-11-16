@@ -34,6 +34,14 @@
 // computer_windows shows which profile each Chrome window belongs to.
 
 ObjC.import("Foundation");
+ObjC.import("AppKit");
+
+/** The application in front: its name, and whether it is Chrome. */
+function front() {
+	const app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
+	if (app.isNil()) return { name: "?", chrome: false };
+	return { name: app.localizedName.js, chrome: app.bundleIdentifier.js === "com.google.Chrome" };
+}
 
 function chrome() {
 	return Application("Google Chrome");
@@ -263,7 +271,13 @@ function main(argv) {
 			const out = [];
 			if (c.windows().length) {
 				const w = c.windows[0];
-				out.push(`The user sees: [1.${w.activeTabIndex()}] ${w.activeTab().title().slice(0, 80)}`);
+				const tab = `[1.${w.activeTabIndex()}] ${w.activeTab().title().slice(0, 80)}`;
+				const app = front();
+				// Chrome's front window is not what the user sees when another
+				// application, or another desktop, is in front.
+				out.push(app.chrome
+					? `The user sees: ${tab}`
+					: `Chrome is not in front: the user sees ${app.name}. Chrome's front window shows ${tab}; chrome_tab brings it to the user.`);
 				const note = siteNote(w.activeTab().url());
 				if (note) out.push(note);
 			}
@@ -298,22 +312,26 @@ function main(argv) {
 			// once closed the tab it had worked in, while the user meant the
 			// new one in front.
 			const [list, sure] = args;
+			const app = front();
+			if (!String(list || "").trim() && !app.chrome) {
+				return `error: Chrome is not in front: the user sees ${app.name}, so "this tab" is probably not a Chrome tab. Give Chrome tabs by number only when the user meant Chrome.`;
+			}
 			const w1 = windowAt(c, 0);
-			const front = [1, w1.activeTabIndex()];
+			const seen = [1, w1.activeTabIndex()];
 			const wanted = String(list || "").trim()
 				? String(list).trim().split(/[\s,]+/).map(parseTarget)
-				: [front];
-			const others = wanted.filter(([w, t]) => !(w === 1 && t === front[1]) && !(w === 0 && t === 0));
+				: [seen];
+			const others = wanted.filter(([w, t]) => !(w === 1 && t === seen[1]) && !(w === 0 && t === 0));
 			if (others.length && sure !== "yes") {
 				const names = others.map(([w, t]) => {
 					const win = windowAt(c, w);
 					return `${w}.${t} ${t >= 1 && t <= win.tabs.length ? win.tabs[t - 1].title() : "(no such tab)"}`;
 				});
-				return `error: not the tab the user sees (${front.join(".")} ${w1.activeTab().title()}): ${names.join("; ")}. ` +
+				return `error: not the tab the user sees (${seen.join(".")} ${w1.activeTab().title()}): ${names.join("; ")}. ` +
 					"\"This tab\" means the one the user sees: call chrome_close without tabs. To close the others, ask the user first (ask_user), then call again with confirm = \"yes\".";
 			}
 			// Highest numbers first, so the numbers still to close stay right.
-			const resolved = wanted.map(([w, t]) => (w === 0 && t === 0 ? front : [w, t]))
+			const resolved = wanted.map(([w, t]) => (w === 0 && t === 0 ? seen : [w, t]))
 				.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
 			const closed = [];
 			for (const [w, t] of resolved) {

@@ -646,7 +646,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          iTerma (iterm_*) używaj do tego, co użytkownik ma widzieć: sesje SSH i tmux, długie polecenia \
          do śledzenia. Narzędzia iterm_* i chrome_* bez parametru target działają na karcie, którą \
          użytkownik widzi; inną kartę podawaj tylko wtedy, gdy użytkownik ją wskazał. Gdy użytkownik \
-         chce gdzieś przejść, przełącz kartę (iterm_tab, chrome_tab): okno przyjdzie wtedy na wierzch. \
+         chce gdzieś przejść, przełącz kartę (iterm_tab, chrome_tab), także gdy to już aktywna karta: \
+         okno przyjdzie wtedy na wierzch, nawet z innego biurka. Aktywna karta okna Chrome'a albo \
+         iTerma nie znaczy, że użytkownik ją widzi. \
          „Ta karta” to zawsze karta, którą użytkownik widzi teraz, nawet jeśli przed chwilą pracowałeś \
          w innej: użytkownik mógł kliknąć link. Gdy strona ma akcje (chrome_actions; chrome_tabs, \
          chrome_tab i chrome_read o nich mówią), używaj ich przez chrome_do zamiast klikania i \

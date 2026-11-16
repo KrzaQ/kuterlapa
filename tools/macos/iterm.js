@@ -21,6 +21,15 @@
 // The text goes to the tab itself, whatever window is in front: typing
 // keys would go to the application in front instead.
 
+ObjC.import("AppKit");
+
+/** The application in front, when it is not iTerm; empty when it is. */
+function otherInFront() {
+	const app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
+	if (app.isNil() || app.bundleIdentifier.js === "com.googlecode.iterm2") return "";
+	return app.localizedName.js;
+}
+
 function folder(session) {
 	try {
 		return session.variable({ named: "session.path" }) || "";
@@ -79,6 +88,10 @@ function main(argv) {
 	switch (command) {
 		case "tabs": {
 			const out = [];
+			// * marks each window's active tab, which the user does not see
+			// while another application, or another desktop, is in front.
+			const other = otherInFront();
+			if (other) out.push(`iTerm is not in front: the user sees ${other}. iterm_tab brings a tab to the user.`);
 			iterm.windows().forEach((w, i) => {
 				let current = "";
 				try {
