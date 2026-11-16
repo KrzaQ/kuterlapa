@@ -1,0 +1,8 @@
+description = "What a site pack offers on a Chrome page: ready actions for sites such as WhatsApp or Messenger (open a conversation by name, list conversations). chrome_tabs, chrome_tab and chrome_read say when a page has them. Use the actions instead of clicking and searching; chrome_do runs them."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "actions", "{target}"]
+timeout = 20
+read_only = true
+
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs. Leave it out: the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false

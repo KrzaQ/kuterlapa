@@ -49,7 +49,10 @@ Three kinds of processes, so each part can be replaced on its own
 - `view/`: the chat view, a web page inside the app (marked, KaTeX and
   highlight.js are included, so it works offline).
 - `tools/macos/`: tools for the models on macOS: Chrome tabs and profiles,
-  iTerm tabs.
+  iTerm tabs, tmux, KeePassXC. `tools/macos/sites/` holds site packs:
+  actions for one site (WhatsApp, Messenger), which the models find with
+  `chrome_actions` and run with `chrome_do`. The tool list stays the same
+  for every site; `chrome.js` describes the pack format.
 - `config/`: example settings.
 
 ## Requirements
@@ -100,6 +103,9 @@ All in `~/.config/kuterlapa/`:
   pi's `bash`), which the engine's permission classifier judges.
 - `tools/*.toml`: your own tools for the models. A session's own tools are
   in its `tools/` folder.
+- `sites/<pack>/site.json`: your own site packs, in the format of
+  `tools/macos/sites/`. A pack replaces a built-in one of the same folder
+  name.
 - `sessions/<name>/`: a session's `context.md` (what the model should
   know) and `session.toml` (`folder`: the project folder the model runs in).
 - History of conversations and one-off commands:

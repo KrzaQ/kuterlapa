@@ -1,0 +1,19 @@
+{
+  "name": "Messenger",
+  "match": ["messenger.com", "facebook.com/messages"],
+  "hint": "Open a conversation with open_chat, a click on the list on screen; search only when it says the person is not there.",
+  "include": ["../lib/chats.js"],
+  "actions": {
+    "list_chats": {
+      "description": "The conversations in the list on screen: name and last message; * marks the open one.",
+      "script": "chats.js"
+    },
+    "open_chat": {
+      "description": "Open a conversation by the person's or group's name, as the user said it. It picks the closest name, or lists the choices when more than one fits, and checks that the conversation opened.",
+      "params": { "name": "The name, as the user said it or as the list shows it" },
+      "script": "chats.js",
+      "check": "check.js",
+      "wait": 1
+    }
+  }
+}

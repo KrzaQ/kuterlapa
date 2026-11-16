@@ -1,0 +1,14 @@
+description = "Run an action of the site pack of a Chrome page (see chrome_actions), for example open_chat with {\"name\": \"Anna\"} on WhatsApp."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./chrome.js", "do", "{target}", "{action}", "{args}"]
+timeout = 30
+
+[params.target]
+description = "Another tab, as window.tab from chrome_tabs. Leave it out: the active tab of the front window, which the user sees. Give it only when the user named another tab."
+required = false
+
+[params.action]
+description = "The action's name from chrome_actions"
+
+[params.args]
+description = "The action's arguments as a JSON object, for example {\"name\": \"Anna\"}; leave it out when it has none"
+required = false

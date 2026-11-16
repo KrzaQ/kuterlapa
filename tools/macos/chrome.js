@@ -27,6 +27,9 @@
 //                              put text into field n (as typing would), and
 //                              with "submit" send its form
 //   click <target> <n>         click element n
+//   actions <target>           the site pack's actions for this page
+//   do <target> <action> [json]
+//                              run one of them, with its arguments as JSON
 //
 // computer_windows shows which profile each Chrome window belongs to.
 
@@ -122,6 +125,112 @@ const FIND = (n) => `
   const name = (el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.placeholder || el.name || "")
     .replace(/\\s+/g, " ").trim().slice(0, 60);`;
 
+// Site packs: actions for one site, loaded by the address of the tab, so
+// that the model's tool list stays the same for every site. A pack is a
+// folder with site.json and the page scripts it names:
+//
+//   sites/<pack>/site.json   built in, next to this script
+//   ~/.config/kuterlapa/sites/<pack>/site.json   the user's own; it
+//                            replaces a built-in pack of the same folder name
+//
+//   {
+//     "name": "WhatsApp",
+//     "match": ["web.whatsapp.com"],      host, or host/path prefix
+//     "hint": "One or two sentences for the model.",
+//     "include": ["../lib/names.js"],     scripts put before each action's
+//     "actions": {
+//       "open_chat": {
+//         "description": "...",
+//         "params": { "name": "..." },    all required, all strings
+//         "script": "chats.js",           runs in the page
+//         "check": "check.js",            optional: runs `wait` seconds later
+//         "wait": 1
+//       }
+//     }
+//   }
+//
+// A page script gets `action`, `args` and, in a check, `result` (what the
+// script returned). It returns text for the model, or an object: its
+// "text" is the answer, and with a check the whole object goes to it.
+
+function readFile(path) {
+	const text = $.NSString.stringWithContentsOfFileEncodingError($(path).stringByStandardizingPath, $.NSUTF8StringEncoding, null);
+	return text.isNil() ? null : text.js;
+}
+
+function scriptDir() {
+	const args = $.NSProcessInfo.processInfo.arguments.js.map((a) => a.js);
+	const me = args.find((a) => /chrome\.js$/.test(a)) || "./chrome.js";
+	const full = me.startsWith("/") ? me : `${$.NSFileManager.defaultManager.currentDirectoryPath.js}/${me}`;
+	return $(full).stringByDeletingLastPathComponent.js;
+}
+
+function packs() {
+	const config = $.NSProcessInfo.processInfo.environment.objectForKey("XDG_CONFIG_HOME");
+	const configDir = config.isNil() ? $("~/.config").stringByExpandingTildeInPath.js : config.js;
+	const byFolder = {};
+	for (const root of [`${scriptDir()}/sites`, `${configDir}/kuterlapa/sites`]) {
+		const names = $.NSFileManager.defaultManager.contentsOfDirectoryAtPathError(root, null);
+		if (names.isNil()) continue;
+		for (const folder of names.js.map((n) => n.js)) {
+			const text = readFile(`${root}/${folder}/site.json`);
+			if (!text) continue;
+			try {
+				byFolder[folder] = { ...JSON.parse(text), dir: `${root}/${folder}` };
+			} catch (e) {
+				byFolder[folder] = { name: folder, match: [], broken: `${root}/${folder}/site.json: ${e.message}` };
+			}
+		}
+	}
+	return Object.values(byFolder);
+}
+
+function packFor(url) {
+	const m = /^[a-z]+:\/\/([^/?#]+)([^?#]*)/i.exec(url || "");
+	if (!m) return null;
+	const host = m[1].toLowerCase(), path = m[2] || "/";
+	return packs().find((p) => (p.match || []).some((entry) => {
+		const [h, ...rest] = entry.toLowerCase().split("/");
+		const prefix = rest.length ? "/" + rest.join("/") : "";
+		return (host === h || host.endsWith("." + h)) && path.startsWith(prefix);
+	})) || null;
+}
+
+/** One line for listings: which actions the site has. */
+function siteNote(url) {
+	const pack = packFor(url);
+	if (!pack || !pack.actions) return "";
+	return `Site actions (${pack.name}): ${Object.keys(pack.actions).join(", ")}. See chrome_actions; prefer them to clicking and searching.`;
+}
+
+function pageScript(pack, file, action, args, result) {
+	const parts = [...(pack.include || []), file].map((f) => {
+		const text = readFile(`${pack.dir}/${f}`);
+		if (text === null) throw new Error(`site pack ${pack.name}: no file ${f}`);
+		return text;
+	});
+	const body = parts.pop();
+	return `(() => {
+const action = ${JSON.stringify(action)};
+const args = ${JSON.stringify(args)};
+const result = ${JSON.stringify(result ?? null)};
+${parts.join("\n")}
+const out = (() => {
+${body}
+})();
+return typeof out === "string" ? out : JSON.stringify(out);
+})()`;
+}
+
+function answerOf(text) {
+	if (text.startsWith("{")) {
+		try {
+			return JSON.parse(text);
+		} catch (e) {}
+	}
+	return { text };
+}
+
 function run(argv) {
 	try {
 		return main(argv);
@@ -140,6 +249,8 @@ function main(argv) {
 			if (c.windows().length) {
 				const w = c.windows[0];
 				out.push(`The user sees: [1.${w.activeTabIndex()}] ${w.activeTab().title().slice(0, 80)}`);
+				const note = siteNote(w.activeTab().url());
+				if (note) out.push(note);
 			}
 			c.windows().forEach((w, i) => {
 				const active = w.activeTabIndex();
@@ -164,7 +275,8 @@ function main(argv) {
 			// the tab, on whatever screen or desktop its window is.
 			w.index = 1;
 			c.activate();
-			return `Tab ${target}: ${w.activeTab().title()}, now in front.`;
+			const note = siteNote(w.activeTab().url());
+			return `Tab ${target}: ${w.activeTab().title()}, now in front.${note ? "\n" + note : ""}`;
 		}
 		case "close": {
 			// No tabs: the tab the user sees. Others only with "yes": a model
@@ -239,7 +351,8 @@ function main(argv) {
 			const limit = Math.min(Number(args[1]) || 6000, 30000);
 			const text = inPage(tab, `document.body ? document.body.innerText.slice(0, ${limit}) : ""`);
 			if (text.startsWith("error:")) return text;
-			return `${tab.title()}\n${tab.url()}\n\n${text}`;
+			const note = siteNote(tab.url());
+			return `${tab.title()}\n${tab.url()}${note ? "\n" + note : ""}\n\n${text}`;
 		}
 		case "fields": {
 			const tab = tabAt(c, args[0]);
@@ -301,6 +414,48 @@ function main(argv) {
 			}
 			return `Filled ${n} (${JSON.stringify(name)}): it shows ${JSON.stringify(value)}.`;
 		}
+		case "actions": {
+			const tab = tabAt(c, args[0]);
+			const url = tab.url();
+			const pack = packFor(url);
+			if (!pack) return `No site pack for ${url.slice(0, 80)}. Use chrome_read, chrome_fields, chrome_fill and chrome_click.`;
+			if (pack.broken) return `error: ${pack.broken}`;
+			const out = [`${pack.name}${pack.hint ? ": " + pack.hint : ""}`, "Actions, for chrome_do:"];
+			for (const [name, a] of Object.entries(pack.actions || {})) {
+				const params = Object.keys(a.params || {});
+				out.push(`- ${name}(${params.join(", ")}): ${a.description || ""}`);
+				for (const [p, d] of Object.entries(a.params || {})) out.push(`    ${p}: ${d}`);
+			}
+			return out.join("\n");
+		}
+		case "do": {
+			const [target, name, json] = args;
+			const tab = tabAt(c, target);
+			const pack = packFor(tab.url());
+			if (!pack) return "error: no site pack for this page; see chrome_actions";
+			if (pack.broken) return `error: ${pack.broken}`;
+			const action = (pack.actions || {})[name];
+			if (!action) return `error: ${pack.name} has no action "${name}"; it has ${Object.keys(pack.actions || {}).join(", ")}`;
+			let given = {};
+			if (String(json || "").trim()) {
+				try {
+					given = JSON.parse(json);
+				} catch (e) {
+					return `error: args must be a JSON object, for example {"name": "Anna"}: ${e.message}`;
+				}
+			}
+			const missing = Object.keys(action.params || {}).filter((p) => given[p] === undefined || given[p] === "");
+			if (missing.length) return `error: ${name} needs ${missing.join(", ")}`;
+			const first = inPage(tab, pageScript(pack, action.script, name, given));
+			if (first.startsWith("error:")) return first;
+			const answer = answerOf(first);
+			if (!action.check || answer.error) return answer.error ? `error: ${answer.error}` : (answer.text ?? first);
+			delay(Number(action.wait) || 1);
+			const checked = inPage(tab, pageScript(pack, action.check, name, given, answer));
+			if (checked.startsWith("error:")) return checked;
+			const final = answerOf(checked);
+			return final.error ? `error: ${final.error}` : (final.text ?? checked);
+		}
 		case "click": {
 			const tab = tabAt(c, args[0]);
 			const n = Number(args[1]);
@@ -309,6 +464,6 @@ function main(argv) {
 			return answer.startsWith("ok") ? `Clicked ${n} ${answer.slice(4)}.` : answer;
 		}
 		default:
-			return "usage: chrome.js tabs | tab <target> | close [targets] [yes] | open <url> [profile] [new|tab] | profiles | read <target> [chars] | fields <target> | fill <target> <n> <text> [submit] | click <target> <n>";
+			return "usage: chrome.js tabs | tab <target> | close [targets] [yes] | open <url> [profile] [new|tab] | profiles | read <target> [chars] | fields <target> | fill <target> <n> <text> [submit] | click <target> <n> | actions <target> | do <target> <action> [json]";
 	}
 }
