@@ -8,6 +8,8 @@ It implements the voice protocol (docs/protocol.md) and listens on
     status       "speaking" or "idle"
     voices       the voices to clone, as JSON: {"chosen": <name>, "voices": [<names>]}
     voice <name> read with this voice from now on; kept across restarts
+    say-as <name> <text>
+                 read the text with this voice, once; the chosen voice stays
 
 The text is split into pieces (pieces.py). One thread makes pieces with
 the backend, another plays them, so the next piece is ready when the
@@ -97,15 +99,26 @@ class Voices:
         log(f"voice: {name}")
         return "ok"
 
-    def _apply(self):
-        if self.chosen and hasattr(self.backend, "set_voice"):
-            base = os.path.join(self.folder, self.chosen)
+    def _apply(self, name=None):
+        name = name or self.chosen
+        if name and hasattr(self.backend, "set_voice"):
+            base = os.path.join(self.folder, name)
             self.backend.set_voice(base + ".wav", base + ".txt")
+
+    def synthesize(self, text, name=None):
+        """Make speech with the chosen voice, or once with another one."""
+        if not name or name == self.chosen:
+            return self.backend.synthesize(text)
+        self._apply(name)
+        try:
+            return self.backend.synthesize(text)
+        finally:
+            self._apply()
 
 
 class Reader:
-    def __init__(self, backend, settings):
-        self.backend = backend
+    def __init__(self, voices, settings):
+        self.voices = voices
         self.settings = settings
         self.texts = queue.Queue()  # pieces of text to make
         self.sounds = queue.Queue(maxsize=2)  # made pieces to play
@@ -117,14 +130,14 @@ class Reader:
         threading.Thread(target=self._make, daemon=True).start()
         threading.Thread(target=self._play, daemon=True).start()
 
-    def say(self, text):
+    def say(self, text, voice=None):
         s = self.settings
         with self.lock:
             generation = self.generation
             was_busy = self.busy > 0
             for piece in split(text, s.first_piece_chars, s.piece_chars):
                 self.busy += 1
-                self.texts.put((generation, piece))
+                self.texts.put((generation, piece, voice))
             if self.busy > 0 and not was_busy:
                 report(True)
 
@@ -144,12 +157,12 @@ class Reader:
 
     def _make(self):
         while True:
-            generation, text = self.texts.get()
+            generation, text, voice = self.texts.get()
             if generation != self.generation:
                 self._done()
                 continue
             try:
-                audio, rate = self.backend.synthesize(text)
+                audio, rate = self.voices.synthesize(text, voice)
             except Exception as e:  # keep the provider alive on a bad piece
                 log(f"synthesis failed: {e}")
                 self._done()
@@ -198,6 +211,13 @@ def serve(reader, voices):
                 answer = json.dumps({"chosen": voices.chosen, "voices": voices.names()}, ensure_ascii=False)
             elif verb == "voice":
                 answer = voices.choose(text.strip())
+            elif verb == "say-as":
+                name, _, words = text.partition(" ")
+                if name not in voices.names():
+                    answer = f"error: no voice {name!r}; voices: {', '.join(voices.names())}"
+                else:
+                    reader.say(words, name)
+                    answer = "ok"
             else:
                 answer = f"error: unknown request {verb}"
             conn.sendall((answer + "\n").encode())
@@ -219,7 +239,8 @@ def main():
     log(f"loading backend {settings.backend}")
     backend = backends.load(settings)
     log("ready")
-    serve(Reader(backend, settings), Voices(backend, settings))
+    voices = Voices(backend, settings)
+    serve(Reader(voices, settings), voices)
 
 
 if __name__ == "__main__":

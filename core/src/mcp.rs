@@ -116,6 +116,21 @@ pub fn run(args: &[String]) -> Result<()> {
                     } },
                 }));
                 list.push(json!({
+                    "name": "narrator_say",
+                    "description": "Say a text aloud now, through the narrator's speakers: with the chosen \
+                                    voice, or once with another (narrator_voice lists them; the chosen one \
+                                    stays). Use it when the user wants something said aloud, for example \
+                                    \"let Karolinka say that she loves me\": write the words as that person \
+                                    would say them. Style tags in square brackets change how a sentence \
+                                    sounds and are not read aloud: [whisper], [excited], [sad], [angry], \
+                                    [laughing], [shouting], [soft]. Put a tag before each sentence it should \
+                                    change.",
+                    "inputSchema": { "type": "object", "properties": {
+                        "text": { "type": "string", "description": "What to say, with style tags if wanted" },
+                        "voice": { "type": "string", "description": "A voice from narrator_voice; leave it out for the chosen one" },
+                    }, "required": ["text"] },
+                }));
+                list.push(json!({
                     "name": "usage_stats",
                     "description": "How many tokens the models used through Kuterlapa, per model: answers, \
                                     draft corrections and pi-censor's classifier, with cache reads and \
@@ -309,6 +324,18 @@ fn call_tool(tools: &[Tool], params: &Value, session: &str) -> Value {
             Err(e) => (format!("error: {e:#}"), false),
         };
         return result(text, ok);
+    }
+    if name == "narrator_say" {
+        let text = arguments.get("text").and_then(Value::as_str).unwrap_or_default().trim();
+        if text.is_empty() {
+            return result("error: give the text to say".into(), false);
+        }
+        let answer = match arguments.get("voice").and_then(Value::as_str).filter(|v| !v.is_empty()) {
+            Some(voice) => crate::voice::send(&format!("say-as {voice} {text}")),
+            None => crate::voice::send(&format!("say {text}")),
+        };
+        let ok = answer == "ok";
+        return result(if ok { "Said it aloud.".into() } else { answer }, ok);
     }
     if name == "narrator_voice" {
         let text = match arguments.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()) {
