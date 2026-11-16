@@ -16,10 +16,10 @@ class Backend:
         self.model = WhisperModel(model, device="auto", compute_type="auto")
 
     def detect(self, audio, allowed):
-        """The most likely of the allowed languages for this audio."""
+        """How likely each of the allowed languages is for this audio."""
         _language, _probability, probs = self.model.detect_language(audio)
         probs = dict(probs)
-        return max(allowed, key=lambda language: probs.get(language, 0.0))
+        return {language: probs.get(language, 0.0) for language in allowed}
 
     def transcribe(self, audio, language, prompt):
         return self.transcribe_scored(audio, language, prompt)[0]

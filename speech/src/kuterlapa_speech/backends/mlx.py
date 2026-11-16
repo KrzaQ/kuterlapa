@@ -13,7 +13,7 @@ class Backend:
         self.model = load_model(model)
 
     def detect(self, audio, allowed):
-        """The most likely of the allowed languages for this audio."""
+        """How likely each of the allowed languages is for this audio."""
         import mlx.core as mx
         from mlx_audio.stt.models.whisper import audio as whisper_audio
 
@@ -21,7 +21,7 @@ class Backend:
             whisper_audio.pad_or_trim(mx.array(audio)), n_mels=self.model.dims.n_mels)
         _tokens, probs = self.model.detect_language(mel)
         probs = probs[0] if isinstance(probs, list) else probs
-        return max(allowed, key=lambda language: probs.get(language, 0.0))
+        return {language: probs.get(language, 0.0) for language in allowed}
 
     def transcribe(self, audio, language, prompt):
         return self.transcribe_scored(audio, language, prompt)[0]

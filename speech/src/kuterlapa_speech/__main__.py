@@ -106,6 +106,12 @@ def inputs():
     return names, system
 
 
+# Below this probability of the main language, a piece is also read in the
+# next likeliest one. Polish pieces scored 0.71 to 1.0; an English one that
+# Whisper took for Polish, 0.45.
+SURE_OF_MAIN = 0.65
+
+
 def report(listening):
     """Tell the core that recording started or stopped (it runs hooks).
 
@@ -433,16 +439,22 @@ class Dictation:
     def _recognize(self, piece):
         """The language and the text of a piece.
 
-        With several languages, Whisper's guess decides when it is the main
-        language. A guess of another one is checked: Whisper took Polish
-        speech for English with 92% certainty. The piece is then recognized
-        in both, and the surer text wins (English read as Polish, or Polish
-        as English, comes out with a much lower score).
+        With several languages, Whisper's guess decides only when it is the
+        main language and Whisper is sure of it. Otherwise the piece is
+        recognized in the two likeliest languages, and the surer text wins:
+        speech read in the wrong language scores much lower. Whisper took
+        Polish speech for English with 92% certainty, and English for Polish
+        at 45% against 44%.
         """
         s = self.settings
         if len(s.languages) > 1:
-            guess = self.backend.detect(piece, s.languages)
-            candidates = [guess] if guess == s.languages[0] else [guess, s.languages[0]]
+            probs = self.backend.detect(piece, s.languages)
+            ranked = sorted(s.languages, key=lambda language: -probs[language])
+            main = s.languages[0]
+            if ranked[0] == main and probs[main] >= SURE_OF_MAIN:
+                candidates = [main]
+            else:
+                candidates = ranked[:2]
             best = None
             for language in candidates:
                 text, score = self.backend.transcribe_scored(piece, language, self._prompt(language))
