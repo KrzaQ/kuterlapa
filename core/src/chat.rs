@@ -650,7 +650,9 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          „Ta karta” to zawsze karta, którą użytkownik widzi teraz, nawet jeśli przed chwilą pracowałeś \
          w innej: użytkownik mógł kliknąć link. Gdy strona ma akcje (chrome_actions; chrome_tabs, \
          chrome_tab i chrome_read o nich mówią), używaj ich przez chrome_do zamiast klikania i \
-         wyszukiwania. \
+         wyszukiwania. Gdy użytkownik wymienia stronę, której nie znasz, albo nazwa brzmi jak źle \
+         usłyszana, poszukaj jej w zakładkach i historii Chrome'a (chrome_bookmarks, chrome_history), \
+         nie w powłoce. \
          Tmuxa obsługuj narzędziami tmux_*, nie wpisuj poleceń tmux w iTerma: „ten tmux” \
          to sesja w aktywnej karcie iTerma (tmux_do bez hosta), a „wejdź / zaloguj się do sesji X” \
          otwiera ją tmux_attach. Gdy nie wiadomo, czy chodzi o sesję tmuxa, czy o logowanie gdzie \

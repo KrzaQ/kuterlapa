@@ -1,0 +1,16 @@
+description = "Search the user's Google Chrome bookmarks by words in the title or address: title, address, profile and folder. Words from speech recognition may be misheard; close words match too. Use it when the user names a page or a site you do not know, instead of guessing or using the shell."
+command = ["uv", "run", "--quiet", "--script", "./chrome_data.py", "bookmarks", "{query}", "{profile}", "{limit}"]
+timeout = 30
+read_only = true
+
+[params.query]
+description = "Words to look for, for example \"allegro koszyk\""
+
+[params.profile]
+description = "A Chrome profile name (chrome_profiles lists them); leave it out for all profiles"
+required = false
+
+[params.limit]
+type = "integer"
+description = "How many results, default 20, at most 100"
+required = false

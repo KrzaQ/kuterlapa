@@ -49,7 +49,7 @@ Three kinds of processes, so each part can be replaced on its own
 - `view/`: the chat view, a web page inside the app (marked, KaTeX and
   highlight.js are included, so it works offline).
 - `tools/macos/`: tools for the models on macOS: Chrome tabs and profiles,
-  iTerm tabs, tmux, KeePassXC. `tools/macos/sites/` holds site packs:
+  iTerm tabs, bookmark and history search, tmux, KeePassXC. `tools/macos/sites/` holds site packs:
   actions for one site (WhatsApp, Messenger), which the models find with
   `chrome_actions` and run with `chrome_do`. The tool list stays the same
   for every site; `chrome.js` describes the pack format.
