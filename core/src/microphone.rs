@@ -42,7 +42,10 @@ pub fn choose(restore: impl Fn()) -> String {
         options,
         multiple: false,
     };
-    match approvals::show("Mikrofon", &question, restore) {
+    // The mark starts on the current choice. A chosen microphone beyond the
+    // rows shown leaves it on the first.
+    let start = inputs.iter().position(|name| **name == devices.chosen).map_or(0, |i| i + 1);
+    match approvals::show_marked("Mikrofon", &question, start, restore) {
         Some(Answer::Chose(picked)) => {
             let name = match picked.first() {
                 Some(0) | None => String::new(),

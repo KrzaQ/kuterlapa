@@ -107,6 +107,12 @@ fn is_choice(question: &Question) -> bool {
 /// and waits for the answer. `title` may be empty. `restore` shows the
 /// overlay as it was before. None if another question is waiting.
 pub fn show(title: &str, question: &Question, restore: impl Fn()) -> Option<Answer> {
+    show_marked(title, question, 0, restore)
+}
+
+/// Like `show`, with the mark of a choice on option `start` at first: the
+/// current setting, so that A alone keeps it.
+pub fn show_marked(title: &str, question: &Question, start: usize, restore: impl Fn()) -> Option<Answer> {
     let description = &question.text;
     let question_only = question.tool.is_none();
     let options = &question.options;
@@ -142,7 +148,7 @@ pub fn show(title: &str, question: &Question, restore: impl Fn()) -> Option<Answ
         let mut p = Pending {
             sender,
             options: if choice { options.clone() } else { Vec::new() },
-            selected: 0,
+            selected: if choice { start.min(options.len().saturating_sub(1)) } else { 0 },
             multiple,
             ticked: vec![false; options.len()],
             overlay: Value::Null,

@@ -60,7 +60,10 @@ pub fn choose_in_overlay(restore: impl Fn()) -> String {
         options,
         multiple: false,
     };
-    match crate::approvals::show("Lektor", &question, restore) {
+    // The mark starts on the current voice. With more voices than rows,
+    // the current one may not be shown; then it starts on the first.
+    let start = names.iter().position(|n| **n == v.chosen).unwrap_or(0);
+    match crate::approvals::show_marked("Lektor", &question, start, restore) {
         Some(lejce::Answer::Chose(picked)) => {
             let Some(name) = picked.first().map(|&i| names[i].clone()) else { return String::new() };
             let done = choose(&name);
