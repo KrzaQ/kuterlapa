@@ -42,6 +42,12 @@ class Settings:
     # The language of the speech (ISO 639-1, such as "pl"). Empty: Whisper
     # detects it in each piece.
     language: str = ""
+    # The languages the user speaks, the main one first, for example
+    # ["pl", "en"]. Whisper then detects the language of each piece and
+    # takes the most likely of these, so it never writes another language
+    # (Chinese letters in noise), and English speech is not translated into
+    # Polish, as a fixed `language` does. It replaces `language`.
+    languages: list[str] = field(default_factory=list)
     # The first sentence of Whisper's context: the language and style of
     # the speech, written in that language. Empty: none.
     prompt_intro: str = ""

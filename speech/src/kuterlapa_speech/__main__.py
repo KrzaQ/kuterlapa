@@ -192,6 +192,7 @@ class Dictation:
         self.texts = []
         self.wav = None
         self.last_text = ""
+        self.last_language = None
         self.cancelled = False
         self.dictionaries = list(settings.dictionaries)
         self.context = ""
@@ -424,22 +425,35 @@ class Dictation:
         while (piece := self.pieces.get()) is not None:
             if self.cancelled:
                 continue
-            prompt = build_prompt(s.prompt_intro, self.dictionaries, self.last_text, self.context)
             t = time.time()
+            language, intro, last = s.language or None, s.prompt_intro, self.last_text
             try:
-                raw = self.backend.transcribe(piece, s.language or None, prompt)
+                if len(s.languages) > 1:
+                    language = self.backend.detect(piece, s.languages)
+                    # The intro is written in the main language, and the last
+                    # text in its own: in another language, either pulls
+                    # Whisper into translating the speech.
+                    if language != s.languages[0]:
+                        intro = ""
+                    if language != self.last_language:
+                        last = ""
+                elif len(s.languages) == 1:
+                    language = s.languages[0]
+                prompt = build_prompt(intro, self.dictionaries, last, self.context)
+                raw = self.backend.transcribe(piece, language, prompt)
             except Exception as e:  # keep the provider alive on a bad piece
                 log(f"transcription failed: {e}")
                 play(s.sound_error)
                 continue
-            text = clean(raw, session_replacements(s), s.language)
-            log(f"{len(piece) / RATE:.1f}s audio, {time.time() - t:.2f}s: {raw}")
+            text = clean(raw, session_replacements(s), language or "")
+            log(f"{len(piece) / RATE:.1f}s audio, {time.time() - t:.2f}s, {language or 'auto'}: {raw}")
             if text != raw:
                 log(f"  cleaned: {text}")
             if not text or self.cancelled:
                 continue
             self.texts.append(text)
             self.last_text = text
+            self.last_language = language
             try:
                 # Leading space: the text often follows text already in the field.
                 reply = core_request(f"dictate  {text}")

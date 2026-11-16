@@ -15,6 +15,12 @@ class Backend:
         # "auto" picks CUDA when it is there, and a fitting number format.
         self.model = WhisperModel(model, device="auto", compute_type="auto")
 
+    def detect(self, audio, allowed):
+        """The most likely of the allowed languages for this audio."""
+        _language, _probability, probs = self.model.detect_language(audio)
+        probs = dict(probs)
+        return max(allowed, key=lambda language: probs.get(language, 0.0))
+
     def transcribe(self, audio, language, prompt):
         segments, _info = self.model.transcribe(
             audio, language=language, initial_prompt=prompt,

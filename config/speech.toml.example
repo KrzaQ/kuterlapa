@@ -13,7 +13,16 @@ model = ""
 # Language of the speech (ISO 639-1 code). Empty: Whisper detects it in
 # each piece. Setting it is faster and more exact, for example:
 #   language = "pl"
+# A fixed language makes Whisper write every piece in it: speech in
+# another language comes out translated, or as nonsense.
 language = ""
+
+# The languages you speak, the main one first. Whisper detects the
+# language of each piece and takes the most likely of these. It replaces
+# `language`, and the prompt_intro below goes only to pieces in the main
+# language. For example:
+#   languages = ["pl", "en"]
+languages = []
 
 # First sentence of Whisper's context: the language and style of the
 # speech, written in that language. Empty: none. For example:
