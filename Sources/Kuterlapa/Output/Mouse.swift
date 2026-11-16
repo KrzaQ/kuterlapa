@@ -29,17 +29,32 @@ enum Mouse {
                 wheel1: dy, wheel2: dx, wheel3: 0)?.post(tap: .cghidEventTap)
     }
 
+    /// Numbers click pairs: a real mouse gives the down and the up of one
+    /// click the same event number.
+    private static var clickNumber: Int64 = 0
+
+    /// Clicks like a real mouse: the down and the up of one click share an
+    /// event number, the down has pressure, and the button stays down for a
+    /// moment. A remote desktop client (RustDesk) took the bare pairs, sent
+    /// in the same millisecond, for double clicks.
     static func click(_ button: CGMouseButton = .left, count: Int = 1) {
         let (down, up): (CGEventType, CGEventType) =
             button == .right ? (.rightMouseDown, .rightMouseUp) : (.leftMouseDown, .leftMouseUp)
+        let source = CGEventSource(stateID: .hidSystemState)
         let at = location
         for n in 1...count {
+            clickNumber += 1
             for type in [down, up] {
-                let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: at,
+                let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: at,
                                     mouseButton: button)
                 event?.setIntegerValueField(.mouseEventClickState, value: Int64(n))
+                event?.setIntegerValueField(.mouseEventNumber, value: clickNumber)
+                event?.setDoubleValueField(.mouseEventPressure, value: type == down ? 1.0 : 0.0)
                 event?.post(tap: .cghidEventTap)
+                usleep(type == down ? 40_000 : 0)
             }
+            // A double click: the second comes soon, but not at once.
+            if n < count { usleep(60_000) }
         }
     }
 
