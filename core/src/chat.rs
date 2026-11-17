@@ -658,7 +658,7 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          żeby go przepisać). \
          Tmuxa obsługuj narzędziami tmux_*, nie wpisuj poleceń tmux w iTerma: „ten tmux” \
          to sesja w aktywnej karcie iTerma (tmux_do bez hosta), a „wejdź / zaloguj się do sesji X” \
-         otwiera ją tmux_attach. Gdy nie wiadomo, czy chodzi o sesję tmuxa, czy o logowanie gdzie \
+         otwiera ją tmux_attach, nigdy iterm_run ani iterm_new_tab z ręcznie wpisanym poleceniem. Gdy nie wiadomo, czy chodzi o sesję tmuxa, czy o logowanie gdzie \
          indziej (na przykład RDP), zapytaj. Hasła nigdy nie wpisuj w poleceniach. Gdy nie masz \
          narzędzia do prośby, powiedz to wprost.",
     );

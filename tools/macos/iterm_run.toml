@@ -1,4 +1,4 @@
-description = "Run a shell command in the iTerm2 tab in front and answer with only the output that came after it (old text in the tab is left out). The text goes straight to the tab, whatever window is in front; prefer it to computer_type for terminals. Use the SSH aliases the user has (ssh <alias>); never type passwords. For a long command, give more seconds, or read the tab later with iterm_read."
+description = "Run a shell command in the iTerm2 tab in front and answer with only the output that came after it (old text in the tab is left out). The text goes straight to the tab, whatever window is in front; prefer it to computer_type for terminals. Use the SSH aliases the user has (ssh <alias>); never type passwords. For a long command, give more seconds, or read the tab later with iterm_read. Only for a tab with a shell: it refuses a tab where Claude Code, tmux or another program runs (text there would go to that program). To show a tmux session use tmux_attach; for a new shell, iterm_new_tab."
 command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "run", "{target}", "{command}", "{seconds}"]
 timeout = 130
 

@@ -66,6 +66,38 @@ function sessionAt(iterm, target) {
 	return tabAt(iterm, target).tab.currentSession();
 }
 
+function variable(session, name) {
+	try {
+		return session.variable({ named: name }) || "";
+	} catch (e) {
+		return "";
+	}
+}
+
+const SHELLS = ["zsh", "-zsh", "bash", "-bash", "fish", "-fish", "sh", "-sh", "login"];
+
+// Claude Code's input box: text typed there is a message to that Claude.
+const CLAUDE_CODE = /⏵⏵|\? for shortcuts|esc to interrupt|shift\+tab to cycle/;
+
+/** Why a command must not be typed into this session, or "" when it may:
+ * a model once typed a command into a tab where Claude Code ran inside
+ * tmux, and that Claude ran it. */
+function notAShell(session) {
+	const job = variable(session, "jobName");
+	const command = variable(session, "commandLine");
+	const tail = lines(session).slice(-6).join("\n");
+	if (CLAUDE_CODE.test(tail)) {
+		return "this tab shows Claude Code: typed text would be a message to it. Use claude_question and claude_answer for its questions, or iterm_new_tab for a shell.";
+	}
+	if (/\btmux\b/.test(command)) {
+		return `this tab shows a tmux session (${command}), whatever runs in it. Use tmux_send or tmux_do for it, tmux_attach to show another session, or iterm_new_tab for a shell.`;
+	}
+	if (job && !SHELLS.includes(job) && job !== "ssh") {
+		return `this tab runs ${job} (${command || job}), not a shell. Use iterm_new_tab for a shell.`;
+	}
+	return "";
+}
+
 /** The text of a session without the empty lines at its end. */
 function lines(session) {
 	const all = session.contents().split("\n");
@@ -127,6 +159,8 @@ function main(argv) {
 		case "run": {
 			const [target, text, seconds] = args;
 			const s = sessionAt(iterm, target);
+			const refuse = notAShell(s);
+			if (refuse) return `error: not run: ${refuse}`;
 			const before = lines(s).length;
 			s.write({ text });
 			// Wait for output: until the text stops changing for a second,
