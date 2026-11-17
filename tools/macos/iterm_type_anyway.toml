@@ -1,0 +1,16 @@
+description = "Type a command into an iTerm2 tab that iterm_run refused (a tab with Claude Code, tmux or another program), and press Return: only when the user asked for exactly that, for example to send a command to the program in that tab. The user approves it first. Answers with the output that came after it."
+command = ["/usr/bin/osascript", "-l", "JavaScript", "./iterm.js", "run", "{target}", "{command}", "{seconds}", "anyway"]
+timeout = 130
+confirm = true
+
+[params.target]
+description = "Another tab, as window.tab from iterm_tabs (for example 2.3). Leave it out: the tab in front, which the user sees."
+required = false
+
+[params.command]
+description = "The text to type"
+
+[params.seconds]
+type = "integer"
+description = "How long to wait for output, default 10, at most 120"
+required = false

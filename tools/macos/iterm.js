@@ -7,7 +7,10 @@
 //   tab <target>                  bring that tab, its window and iTerm to
 //                                 the front
 //   read <target> [lines]         the last lines of a tab's text
-//   run <target> <command> [seconds]
+//   run <target> <command> [seconds] [anyway]
+//                                 (only into a tab with a shell, unless
+//                                 "anyway", which iterm_type_anyway gives
+//                                 after the user approved)
 //                                 type the command into the tab and answer
 //                                 with only the text that came after it
 //   new [command]                 a new tab in the front window, and run the
@@ -157,10 +160,12 @@ function main(argv) {
 			return `${s.name()}:\n` + lines(s).slice(-count).join("\n");
 		}
 		case "run": {
-			const [target, text, seconds] = args;
+			const [target, text, seconds, anyway] = args;
 			const s = sessionAt(iterm, target);
-			const refuse = notAShell(s);
-			if (refuse) return `error: not run: ${refuse}`;
+			// "anyway" comes only from iterm_type_anyway, which the user
+			// approves first.
+			const refuse = anyway === "anyway" ? "" : notAShell(s);
+			if (refuse) return `error: not run: ${refuse} If the user asked for exactly this, use iterm_type_anyway: it asks the user first.`;
 			const before = lines(s).length;
 			s.write({ text });
 			// Wait for output: until the text stops changing for a second,
