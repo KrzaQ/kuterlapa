@@ -286,7 +286,16 @@ impl Chat {
                 self.store.add_message(conversation, "user", question, None, None)?;
                 crate::view::changed();
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress);
+                let answer = match answer {
+                    Ok(answer) => answer,
+                    Err(e) => {
+                        let text = unfinished(&e, self.state.lock().unwrap().activity.as_ref());
+                        self.store.add_message(conversation, "assistant", &text, Some(&profile.name), work().as_deref())?;
+                        crate::view::changed();
+                        return Err(e);
+                    }
+                };
                 self.store.add_message(conversation, "assistant", &answer, Some(&profile.name), work().as_deref())?;
                 Ok((answer, None))
             }
@@ -298,7 +307,16 @@ impl Chat {
                 let thread = self.store.add_command(thread, Some(&session.name), "user", question, None, None)?;
                 crate::view::changed();
                 let answer =
-                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress)?;
+                    engines::complete_in(&profile, &system, &with_history(&history, question), session.folder.as_deref(), Some(&session.name), &progress);
+                let answer = match answer {
+                    Ok(answer) => answer,
+                    Err(e) => {
+                        let text = unfinished(&e, self.state.lock().unwrap().activity.as_ref());
+                        self.store.add_command(Some(thread), Some(&session.name), "assistant", &text, Some(&profile.name), work().as_deref())?;
+                        crate::view::changed();
+                        return Err(e);
+                    }
+                };
                 self.store.add_command(Some(thread), Some(&session.name), "assistant", &answer, Some(&profile.name), work().as_deref())?;
                 Ok((answer, Some(thread)))
             }
@@ -811,4 +829,28 @@ fn listening() -> String {
         Some(name) => format!("Słucham… · 🎙 {name}"),
         None => "Słucham…".into(),
     }
+}
+
+/// The history's entry for an answer that did not come: cancelled or
+/// failed, with what the model did before. The next question sends it to
+/// the model too, so it knows what it already did (a cancelled model once
+/// typed a command into the wrong tab, and the next one did not know).
+fn unfinished(error: &anyhow::Error, activity: Option<&Activity>) -> String {
+    let mut text = if engines::is_cancelled(error) {
+        "(Przerwane przez użytkownika, bez odpowiedzi.)".to_string()
+    } else {
+        format!("(Bez odpowiedzi, błąd: {error})")
+    };
+    let steps: Vec<String> = activity
+        .map(|a| {
+            a.steps
+                .iter()
+                .map(|s| if s.detail.is_empty() { s.name.clone() } else { format!("{} ({})", s.name, s.detail.chars().take(120).collect::<String>()) })
+                .collect()
+        })
+        .unwrap_or_default();
+    if !steps.is_empty() {
+        text.push_str(&format!(" Zdążyłem wywołać: {}.", steps.join("; ")));
+    }
+    text
 }
