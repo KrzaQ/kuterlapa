@@ -219,6 +219,7 @@ fn send(view: &View, follow: bool) {
         .collect();
     let state = json!({
         "visible": true,
+        "language": if crate::ui::polish() { "pl" } else { "en" },
         "scale": computer::overlay_scale(),
         "session": session.name,
         "label": session.label,

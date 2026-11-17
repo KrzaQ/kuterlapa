@@ -47,6 +47,7 @@ mod search;
 mod store;
 mod submit;
 mod tools;
+mod ui;
 mod usage;
 mod view;
 mod voice;

@@ -50,7 +50,7 @@ fn choices(p: &Pending) -> Value {
         })
         .collect();
     if p.multiple {
-        rows.push(json!({ "text": "✓ Gotowe", "selected": p.selected == p.options.len(), "done": true }));
+        rows.push(json!({ "text": crate::ui::tr("✓ Gotowe", "✓ Done"), "selected": p.selected == p.options.len(), "done": true }));
     }
     json!(rows)
 }
@@ -122,10 +122,10 @@ pub fn show_marked(title: &str, question: &Question, start: usize, restore: impl
         "visible": true,
         "title": match title {
             t if !t.is_empty() => t.to_string(),
-            _ if question_only => "Pytanie modelu".into(),
-            _ => "Zgoda".into(),
+            _ if question_only => crate::ui::tr("Pytanie modelu", "Question from the model").into(),
+            _ => crate::ui::tr("Zgoda", "Permission").into(),
         },
-        "status": "Czekam na Twoją decyzję",
+        "status": crate::ui::tr("Czekam na Twoją decyzję", "Waiting for your decision"),
         "heading": match &question.tool {
             None => description.clone(),
             Some(tool) => tool.replace('_', " "),
@@ -133,9 +133,9 @@ pub fn show_marked(title: &str, question: &Question, start: usize, restore: impl
         "text": if question_only { String::new() } else { description.clone() },
         "detail": question.detail,
         "buttons": if choice {
-            json!([{ "key": "A", "label": "Wybierz", "tone": "yes" }, { "key": "B", "label": "Anuluj", "tone": "no" }])
+            json!([{ "key": "A", "label": crate::ui::tr("Wybierz", "Choose"), "tone": "yes" }, { "key": "B", "label": crate::ui::tr("Anuluj", "Cancel"), "tone": "no" }])
         } else {
-            json!([{ "key": "A", "label": "Tak", "tone": "yes" }, { "key": "B", "label": "Nie", "tone": "no" }])
+            json!([{ "key": "A", "label": crate::ui::tr("Tak", "Yes"), "tone": "yes" }, { "key": "B", "label": crate::ui::tr("Nie", "No"), "tone": "no" }])
         },
         "attention": true,
     });
@@ -156,12 +156,15 @@ pub fn show_marked(title: &str, question: &Question, start: usize, restore: impl
         if choice {
             overlay["choices"] = choices(&p);
             overlay["hint"] = json!(if multiple {
-                "↑ ↓: wybór · A: zaznacz, na „Gotowe”: odpowiedz · B: anuluj"
+                crate::ui::tr(
+                    "↑ ↓: wybór · A: zaznacz, na „Gotowe”: odpowiedz · B: anuluj",
+                    "↑ ↓: move · A: tick, on “Done”: answer · B: cancel",
+                )
             } else {
-                "↑ ↓: wybór · A: wybierz · B: anuluj"
+                crate::ui::tr("↑ ↓: wybór · A: wybierz · B: anuluj", "↑ ↓: move · A: choose · B: cancel")
             });
             if multiple {
-                overlay["buttons"] = json!([{ "key": "A", "label": "Zaznacz", "tone": "yes" }, { "key": "B", "label": "Anuluj", "tone": "no" }]);
+                overlay["buttons"] = json!([{ "key": "A", "label": crate::ui::tr("Zaznacz", "Tick"), "tone": "yes" }, { "key": "B", "label": crate::ui::tr("Anuluj", "Cancel"), "tone": "no" }]);
             }
         }
         p.overlay = overlay.clone();
@@ -175,7 +178,7 @@ pub fn show_marked(title: &str, question: &Question, start: usize, restore: impl
         } else if question_only {
             voice::send(&format!("say {description}"));
         } else {
-            voice::send(&format!("say Czy pozwalasz? {description}"));
+            voice::send(&format!("say {} {description}", crate::ui::tr("Czy pozwalasz?", "Do you allow this?")));
         }
     }
     let answer = receiver.recv_timeout(WAIT).unwrap_or(Answer::Unanswered);

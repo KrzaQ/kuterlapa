@@ -36,18 +36,24 @@ fn items(store: &Store) -> Result<Vec<Item>> {
     let mut seen = std::collections::HashSet::new();
     for session in sessions::all() {
         for note in memory::list(&session.name) {
-            let place = match note.scope {
+            // The key stays in Polish, so that the stored vectors fit it in
+            // either language.
+            let key_place = match note.scope {
                 memory::Scope::Global => "notatka globalna".to_string(),
                 memory::Scope::Session => format!("notatka sesji {}", session.name),
             };
-            let key = format!("note:{place}:{}", note.name);
+            let key = format!("note:{key_place}:{}", note.name);
             if !seen.insert(key.clone()) {
                 continue;
             }
             items.push(Item {
                 key,
                 text: format!("{}: {}\n{}", note.name, note.description, note.text),
-                label: format!("{place} „{}”", note.name),
+                label: match (note.scope, crate::ui::polish()) {
+                    (_, true) => format!("{key_place} „{}”", note.name),
+                    (memory::Scope::Global, false) => format!("global note \"{}\"", note.name),
+                    (memory::Scope::Session, false) => format!("note of session {} \"{}\"", session.name, note.name),
+                },
             });
         }
     }
@@ -55,11 +61,19 @@ fn items(store: &Store) -> Result<Vec<Item>> {
         if text.chars().count() < MIN_CHARS {
             continue;
         }
-        let who = if role == "user" { "użytkownik" } else { "asystent" };
+        let who = if role == "user" {
+            crate::ui::tr("użytkownik", "user")
+        } else {
+            crate::ui::tr("asystent", "assistant")
+        };
         items.push(Item {
             key: format!("msg:{id}"),
             text: text.chars().take(TEXT_CHARS).collect(),
-            label: format!("rozmowa w sesji {session}, {created}, {who}"),
+            label: if crate::ui::polish() {
+                format!("rozmowa w sesji {session}, {created}, {who}")
+            } else {
+                format!("conversation in session {session}, {created}, {who}")
+            },
         });
     }
     Ok(items)

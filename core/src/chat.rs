@@ -424,7 +424,7 @@ impl Chat {
                 s.error = None;
                 drop(s);
                 voice::send("stop");
-                self.flash("Nowe polecenie");
+                self.flash(crate::ui::tr("Nowe polecenie", "New command"));
                 return;
             }
         }
@@ -445,7 +445,7 @@ impl Chat {
             s.thread = None;
             s.mode = Mode::Conversation;
         }
-        self.flash("Nowa rozmowa");
+        self.flash(crate::ui::tr("Nowa rozmowa", "New conversation"));
     }
 
     pub fn toggle_voice(self: &Arc<Self>) {
@@ -459,23 +459,29 @@ impl Chat {
             voice::send("stop");
         }
         self.flash(match mode {
-            VoiceMode::Off => "Lektor: wyłączony",
-            VoiceMode::Read => "Lektor: czyta całe odpowiedzi",
-            VoiceMode::Talk => "Lektor: rozmowa (krótkie odpowiedzi)",
+            VoiceMode::Off => crate::ui::tr("Lektor: wyłączony", "Narrator: off"),
+            VoiceMode::Read => crate::ui::tr("Lektor: czyta całe odpowiedzi", "Narrator: reads whole answers"),
+            VoiceMode::Talk => crate::ui::tr("Lektor: rozmowa (krótkie odpowiedzi)", "Narrator: talk (short answers)"),
         });
     }
 
     /// The window in front picked another session. The note stays longer
     /// than others: the user must see that the context changed.
     pub fn session_changed(self: &Arc<Self>, old: &str, new: &str) {
-        self.flash_for(
-            &format!("Sesja: {old} → {new} (z okna) · cofnięcie: „wróć do poprzedniej sesji”"),
-            Duration::from_secs(5),
-        );
+        let note = if crate::ui::polish() {
+            format!("Sesja: {old} → {new} (z okna) · cofnięcie: „wróć do poprzedniej sesji”")
+        } else {
+            format!("Session: {old} → {new} (from the window) · to undo: “go back to the previous session”")
+        };
+        self.flash_for(&note, Duration::from_secs(5));
     }
 
     pub fn profile_changed(self: &Arc<Self>, name: &str) {
-        self.flash(&format!("Profil: {name}"));
+        if crate::ui::polish() {
+            self.flash(&format!("Profil: {name}"));
+        } else {
+            self.flash(&format!("Profile: {name}"));
+        }
     }
 
     /// A note for a few seconds, from a tool ("note <text>" on core.sock).
@@ -553,9 +559,9 @@ impl Chat {
         // A badge says what kind of exchange this is; a one-off command is
         // temporary, so the overlay draws a dashed frame around it.
         let (badge, tone) = match (s.mode, s.thread.is_some()) {
-            (Mode::Conversation, _) => ("ROZMOWA", "conversation"),
-            (Mode::Command, true) => ("POLECENIE · CIĄG DALSZY", "command"),
-            (Mode::Command, false) => ("POLECENIE · JEDNORAZOWE", "command"),
+            (Mode::Conversation, _) => (crate::ui::tr("ROZMOWA", "CONVERSATION"), "conversation"),
+            (Mode::Command, true) => (crate::ui::tr("POLECENIE · CIĄG DALSZY", "COMMAND · FOLLOW-UP"), "command"),
+            (Mode::Command, false) => (crate::ui::tr("POLECENIE · JEDNORAZOWE", "COMMAND · ONE-OFF"), "command"),
         };
         let speaker = match s.voice {
             VoiceMode::Off => "",
@@ -571,7 +577,11 @@ impl Chat {
         } else if s.busy {
             match &s.activity {
                 Some(a) => {
-                    let mut line = format!("{profile} myśli… {} s · {}", a.started.elapsed().as_secs(), token_line(a));
+                    let mut line = if crate::ui::polish() {
+                        format!("{profile} myśli… {} s · {}", a.started.elapsed().as_secs(), token_line(a))
+                    } else {
+                        format!("{profile} is thinking… {} s · {}", a.started.elapsed().as_secs(), token_line(a))
+                    };
                     if let Some(context) = context_line(a) {
                         line.push_str(&format!(" · {context}"));
                     }
@@ -580,10 +590,15 @@ impl Chat {
                     }
                     line
                 }
-                None => format!("{profile} myśli…"),
+                None if crate::ui::polish() => format!("{profile} myśli…"),
+                None => format!("{profile} is thinking…"),
             }
         } else if let Some(e) = &s.error {
-            format!("Błąd: {e}")
+            if crate::ui::polish() {
+                format!("Błąd: {e}")
+            } else {
+                format!("Error: {e}")
+            }
         } else {
             String::new()
         };
@@ -601,13 +616,16 @@ impl Chat {
             }
         }
         let hint = if s.recording {
-            "Y: wyślij · A: wyślij · B: anuluj"
+            crate::ui::tr("Y: wyślij · A: wyślij · B: anuluj", "Y: send · A: send · B: cancel")
         } else if s.mode == Mode::Command && s.thread.is_some() {
-            "Y Y: dopytaj · +: nowe polecenie · Y: rozmowa · B: zamknij"
+            crate::ui::tr(
+                "Y Y: dopytaj · +: nowe polecenie · Y: rozmowa · B: zamknij",
+                "Y Y: ask more · +: new command · Y: conversation · B: close",
+            )
         } else if s.mode == Mode::Command {
-            "Y Y: nowe polecenie · Y: rozmowa · B: zamknij"
+            crate::ui::tr("Y Y: nowe polecenie · Y: rozmowa · B: zamknij", "Y Y: new command · Y: conversation · B: close")
         } else {
-            "Y: dalej · Y Y: polecenie · B: zamknij"
+            crate::ui::tr("Y: dalej · Y Y: polecenie · B: zamknij", "Y: continue · Y Y: command · B: close")
         };
         let mut state = json!({
             "visible": true, "title": title, "status": status, "text": text, "hint": hint,
@@ -644,7 +662,8 @@ impl Chat {
 }
 
 fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> String {
-    let mut p = String::from(
+    let polish = crate::ui::polish();
+    let mut p = String::from(if polish {
         "Jesteś asystentem w Kuterłapie. Użytkownik pracuje głosem: dyktuje, a rozpoznawanie mowy bywa \
          niedokładne, więc domyślaj się sensu. Odpowiadaj krótko i konkretnie, po polsku, chyba że \
          użytkownik prosi inaczej. Odpowiedź pojawi się w małym oknie w rogu ekranu. Możesz mieć \
@@ -678,24 +697,72 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          to sesja w aktywnej karcie iTerma (tmux_do bez hosta), a „wejdź / zaloguj się do sesji X” \
          otwiera ją tmux_attach, nigdy iterm_run ani iterm_new_tab z ręcznie wpisanym poleceniem. Gdy nie wiadomo, czy chodzi o sesję tmuxa, czy o logowanie gdzie \
          indziej (na przykład RDP), zapytaj. Hasła nigdy nie wpisuj w poleceniach. Gdy nie masz \
-         narzędzia do prośby, powiedz to wprost.",
-    );
+         narzędzia do prośby, powiedz to wprost."
+    } else {
+        "You are the assistant in Kuterlapa. The user works by voice: the user dictates, and speech \
+         recognition is sometimes not accurate, so guess the meaning. Answer briefly and to the point, \
+         in the language the user speaks, English by default. The answer shows in a small window in \
+         the corner of the screen. You can have tools that control the user's devices and programs. \
+         Use them when the user asks for it. Do each action once. When it worked, do not do it again, \
+         and end with your answer. When you need a \"yes\" or a \"no\" from the user, ask with the \
+         ask_user tool (the user answers with the A and B buttons). When the user must choose one of \
+         several things, give them in ask_user as options (2–6 short names; the user chooses with the \
+         gamepad). Never put the choices into a yes/no question. Never write \"A — …, B — …\" in your \
+         answer: the buttons do not answer text. Never say that you did something if a tool did not \
+         do it. Do not open the browser's developer tools and do not type code into the page console: \
+         for pages, use the chrome_* tools. When something does not work, tell the user. Do not work \
+         around it. For windows, applications and pages, first use the ready tools (computer_*, \
+         chrome_*, iterm_*, tmux_*). Use the shell and AppleScript for this only when no tool fits: \
+         then do it with them. Do not give up. \
+         When you have a shell (bash), use it for work in the background: to check something, to \
+         calculate, to read a file. Use iTerm (iterm_*) for what the user must see: SSH and tmux \
+         sessions, long commands to follow. The iterm_* and chrome_* tools without the target \
+         parameter work on the tab that the user sees. Give another tab only when the user pointed to \
+         it. When the user wants to go somewhere, switch the tab (iterm_tab, chrome_tab), also when it \
+         is already the active tab: then the window comes to the front, even from another desktop. \
+         The active tab of a Chrome or iTerm window does not mean that the user sees it. \
+         \"This tab\" is always the tab that the user sees now, even if you worked in another tab a \
+         moment ago: the user may have clicked a link. When a page has actions (chrome_actions; \
+         chrome_tabs, chrome_tab and chrome_read tell about them), use them through chrome_do instead \
+         of clicking and searching. When the user names a page that you do not know, or the name \
+         sounds misheard, look for it in Chrome's bookmarks and history (chrome_bookmarks, \
+         chrome_history), not in the shell. \"Paste\" means: clipboard_paste into the window in front \
+         (do not read the clipboard to type it again). \
+         Control tmux with the tmux_* tools. Do not type tmux commands into iTerm. \"This tmux\" is \
+         the session in the active iTerm tab (tmux_do without a host). \"Go into / log in to session \
+         X\" opens it with tmux_attach, never with iterm_run or iterm_new_tab and a command typed by \
+         hand. When it is not clear whether the user means a tmux session or a login somewhere else \
+         (for example RDP), ask. Never type a password in commands. When you do not have a tool for \
+         a request, say so directly."
+    });
     // Read: the answer is read as written, so the prompt does not change.
     if voice == VoiceMode::Talk {
-        p.push_str(
+        p.push_str(if polish {
             " Lektor przeczyta Twoją odpowiedź na głos, a użytkownik prowadzi z Tobą płynną rozmowę: \
              streszczaj się, mów jak w rozmowie, zwykle jednym do trzech zdań, bez list, tabel i \
-             bloków kodu.",
-        );
+             bloków kodu."
+        } else {
+            " The narrator reads your answer aloud, and the user has a flowing conversation with you. \
+             Be brief and speak as in a conversation, usually in one to three sentences. Use no lists, \
+             tables or code blocks."
+        });
     }
     match mode {
-        Mode::Conversation => p.push_str(&format!(" To rozmowa w sesji „{}”.", session.name)),
-        Mode::Command => p.push_str(" To jednorazowe polecenie: odpowiedz zwięźle."),
+        Mode::Conversation if polish => p.push_str(&format!(" To rozmowa w sesji „{}”.", session.name)),
+        Mode::Conversation => p.push_str(&format!(" This is a conversation in the session \"{}\".", session.name)),
+        Mode::Command => p.push_str(crate::ui::tr(
+            " To jednorazowe polecenie: odpowiedz zwięźle.",
+            " This is a one-off command: answer briefly.",
+        )),
     }
     if !session.context.trim().is_empty() {
-        p.push_str(&format!("\n\nKontekst sesji „{}”:\n{}", session.name, session.context.trim()));
+        if polish {
+            p.push_str(&format!("\n\nKontekst sesji „{}”:\n{}", session.name, session.context.trim()));
+        } else {
+            p.push_str(&format!("\n\nContext of the session \"{}\":\n{}", session.name, session.context.trim()));
+        }
     }
-    p.push_str(
+    p.push_str(if polish {
         "\n\nSesje: zmieniaj sesję (session_switch) tylko, gdy użytkownik wprost o to prosi, np. „przejdź do \
          sesji X” albo „wejdź do iTerma, do sesji X”, a X to nazwa jednej z sesji Kuterłapy. Słowo „sesja” \
          często znaczy co innego: sesję tmuxa albo SSH, stronę, aukcję czy sprzedaż w sklepie. Wtedy nie \
@@ -704,8 +771,20 @@ fn system_prompt(mode: Mode, session: &sessions::Session, voice: VoiceMode) -> S
          że okno na wierzchu należy do jakiejś sesji, użyj session_bind ze stałym fragmentem tytułu (nazwa \
          arkusza, projektu, kanału; nie liczby powiadomień). „Wróć do poprzedniej sesji”: session_back. Nową sesję twórz \
          (session_create) tylko na wyraźną prośbę użytkownika; gdy sesji, do której chce przejść, nie ma, \
-         zaproponuj utworzenie i zaczekaj na zgodę.",
-    );
+         zaproponuj utworzenie i zaczekaj na zgodę."
+    } else {
+        "\n\nSessions: change the session (session_switch) only when the user asks for it directly, for \
+         example \"go to session X\" or \"go into iTerm, to session X\", and X is the name of one of the \
+         Kuterlapa sessions. The word \"session\" often means something else: a tmux or SSH session, \
+         a page, an auction or a sale in a shop. Then do not change the session. If you are not sure, \
+         ask. A move to a window, tab or application alone does not change the session: in automatic \
+         mode, the window changes it when the user starts to speak. When the user says that the window in \
+         front belongs to a session, use session_bind with a part of the title that does not change \
+         (the name of a sheet, project or channel; not the number of notifications). \"Go back to \
+         the previous session\": session_back. Create a new session (session_create) only when the \
+         user clearly asks for it. When the session that the user wants to go to does not exist, \
+         offer to create it and wait for the user to agree."
+    });
     p.push_str(&memory::prompt(&session.name));
     p
 }
@@ -714,12 +793,22 @@ fn with_history(history: &[Message], question: &str) -> String {
     if history.is_empty() {
         return question.to_string();
     }
-    let mut text = String::from("Dotychczasowa rozmowa:\n\n");
+    let polish = crate::ui::polish();
+    let mut text = String::from(if polish { "Dotychczasowa rozmowa:\n\n" } else { "The conversation so far:\n\n" });
     for m in history {
-        let who = if m.role == "user" { "Użytkownik" } else { "Asystent" };
+        let who = match (m.role == "user", polish) {
+            (true, true) => "Użytkownik",
+            (false, true) => "Asystent",
+            (true, false) => "User",
+            (false, false) => "Assistant",
+        };
         text.push_str(&format!("{who}: {}\n\n", m.text));
     }
-    text.push_str(&format!("Nowa wiadomość użytkownika:\n{question}"));
+    if polish {
+        text.push_str(&format!("Nowa wiadomość użytkownika:\n{question}"));
+    } else {
+        text.push_str(&format!("The new message from the user:\n{question}"));
+    }
     text
 }
 
@@ -730,7 +819,7 @@ fn for_speech(text: &str) -> String {
     for line in text.lines() {
         if line.trim_start().starts_with("```") {
             if !in_code {
-                out.push_str("(kod pominięty) ");
+                out.push_str(crate::ui::tr("(kod pominięty) ", "(code skipped) "));
             }
             in_code = !in_code;
             continue;
@@ -753,7 +842,12 @@ fn activity_lines(a: &Activity) -> serde_json::Value {
     let mut lines = Vec::new();
     let skipped = a.steps.len().saturating_sub(STEPS);
     if skipped > 0 {
-        lines.push(json!({ "kind": "more", "text": format!("… i {} wcześniej", tool_count(skipped)) }));
+        let text = if crate::ui::polish() {
+            format!("… i {} wcześniej", tool_count(skipped))
+        } else {
+            format!("… and {} earlier", tool_count(skipped))
+        };
+        lines.push(json!({ "kind": "more", "text": text }));
     }
     for step in &a.steps[skipped..] {
         let state = match step.state {
@@ -775,14 +869,15 @@ fn context_line(a: &Activity) -> Option<String> {
     if a.context == 0 {
         return None;
     }
+    let word = crate::ui::tr("kontekst", "context");
     Some(match a.window.filter(|&w| w > 0) {
         Some(window) => format!(
-            "kontekst {}/{} ({}%)",
+            "{word} {}/{} ({}%)",
             tokens(a.context),
             tokens(window),
             (a.context * 100 + window / 2) / window
         ),
-        None => format!("kontekst {}", tokens(a.context)),
+        None => format!("{word} {}", tokens(a.context)),
     })
 }
 
@@ -809,11 +904,18 @@ fn limits_line(a: &Activity) -> Option<String> {
 }
 
 fn token_line(a: &Activity) -> String {
-    format!("tokeny: {} wej. · {} wyj.", tokens(a.input), tokens(a.output()))
+    if crate::ui::polish() {
+        format!("tokeny: {} wej. · {} wyj.", tokens(a.input), tokens(a.output()))
+    } else {
+        format!("tokens: {} in · {} out", tokens(a.input), tokens(a.output()))
+    }
 }
 
-/// "1 narzędzie", "3 narzędzia", "5 narzędzi".
+/// "1 narzędzie", "3 narzędzia", "5 narzędzi"; "1 tool", "3 tools".
 fn tool_count(n: usize) -> String {
+    if !crate::ui::polish() {
+        return format!("{n} {}", if n == 1 { "tool" } else { "tools" });
+    }
     let word = match (n % 10, n % 100) {
         _ if n == 1 => "narzędzie",
         (2..=4, d) if !(12..=14).contains(&d) => "narzędzia",
@@ -825,9 +927,10 @@ fn tool_count(n: usize) -> String {
 /// "Słucham…", with the microphone when the user chose one: then the
 /// system's default input is not what records.
 fn listening() -> String {
+    let word = crate::ui::tr("Słucham…", "Listening…");
     match crate::microphone::chosen() {
-        Some(name) => format!("Słucham… · 🎙 {name}"),
-        None => "Słucham…".into(),
+        Some(name) => format!("{word} · 🎙 {name}"),
+        None => word.into(),
     }
 }
 
@@ -836,10 +939,13 @@ fn listening() -> String {
 /// the model too, so it knows what it already did (a cancelled model once
 /// typed a command into the wrong tab, and the next one did not know).
 fn unfinished(error: &anyhow::Error, activity: Option<&Activity>) -> String {
+    let polish = crate::ui::polish();
     let mut text = if engines::is_cancelled(error) {
-        "(Przerwane przez użytkownika, bez odpowiedzi.)".to_string()
-    } else {
+        crate::ui::tr("(Przerwane przez użytkownika, bez odpowiedzi.)", "(Cancelled by the user, no answer.)").to_string()
+    } else if polish {
         format!("(Bez odpowiedzi, błąd: {error})")
+    } else {
+        format!("(No answer, error: {error})")
     };
     let steps: Vec<String> = activity
         .map(|a| {
@@ -850,7 +956,11 @@ fn unfinished(error: &anyhow::Error, activity: Option<&Activity>) -> String {
         })
         .unwrap_or_default();
     if !steps.is_empty() {
-        text.push_str(&format!(" Zdążyłem wywołać: {}.", steps.join("; ")));
+        if polish {
+            text.push_str(&format!(" Zdążyłem wywołać: {}.", steps.join("; ")));
+        } else {
+            text.push_str(&format!(" Before that, I called: {}.", steps.join("; ")));
+        }
     }
     text
 }

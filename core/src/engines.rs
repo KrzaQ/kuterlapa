@@ -136,7 +136,7 @@ const LABELS: [(&str, &str); 4] = [
 ];
 
 /// Asks the user an engine's question in the overlay, with the options in
-/// Polish.
+/// Polish when the user chose Polish.
 fn ask(engine: Engine, question: &Question) -> Answer {
     if question.options.len() > approvals::MAX_OPTIONS {
         eprintln!("{engine} asked with {} options; cancelled", question.options.len());
@@ -146,7 +146,11 @@ fn ask(engine: Engine, question: &Question) -> Answer {
     shown.options = question
         .options
         .iter()
-        .map(|o| LABELS.iter().find(|(from, _)| from == o).map(|(_, to)| to.to_string()).unwrap_or_else(|| o.clone()))
+        .map(|o| match LABELS.iter().find(|(from, _)| from == o) {
+            Some((_, to)) if crate::ui::polish() => to.to_string(),
+            _ => o.clone(),
+        })
         .collect();
-    approvals::show(&format!("Pytanie z {engine}"), &shown, || {}).unwrap_or(Answer::Unanswered)
+    let title = if crate::ui::polish() { format!("Pytanie z {engine}") } else { format!("Question from {engine}") };
+    approvals::show(&title, &shown, || {}).unwrap_or(Answer::Unanswered)
 }

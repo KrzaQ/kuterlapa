@@ -47,9 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func statusLines() -> [String] {
         let pads = gamepad.connectedNames
         return [
-            "Dostępność: " + (Keystrokes.allowed ? "tak" : "brak zgody"),
-            "Rdzeń: " + (core.isRunning ? "działa" : "nie działa"),
-            "Pad: " + (pads.isEmpty ? "brak" : pads.joined(separator: ", ")),
+            tr("Dostępność: ", "Accessibility: ")
+                + (Keystrokes.allowed ? tr("tak", "allowed") : tr("brak zgody", "not allowed")),
+            tr("Rdzeń: ", "Core: ") + (core.isRunning ? tr("działa", "running") : tr("nie działa", "not running")),
+            tr("Pad: ", "Controller: ") + (pads.isEmpty ? tr("brak", "none") : pads.joined(separator: ", ")),
         ]
     }
 }

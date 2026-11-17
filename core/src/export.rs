@@ -1,6 +1,7 @@
 //! Exports conversations to Markdown files, one per conversation, in
-//! ~/Documents/Kuterlapa/<session>/<date>-rozmowa-<id>.md. An export again
-//! replaces the file, so it always holds the whole conversation.
+//! ~/Documents/Kuterlapa/<session>/<date>-conversation-<id>.md ("rozmowa" in
+//! Polish). An export again replaces the file, so it always holds the whole
+//! conversation.
 //!
 //!   kuterlapa export [session] [--all]
 //!
@@ -21,15 +22,24 @@ fn folder(session: &str) -> PathBuf {
 /// Writes one conversation; returns the file.
 fn write(store: &Store, session: &sessions::Session, id: i64, created: &str) -> Result<PathBuf> {
     let messages = store.messages_full(id, usize::MAX >> 1)?;
-    let mut md = format!("# {} · rozmowa {id}\n\n_Od {created}_\n", session.label);
+    let polish = crate::ui::polish();
+    let mut md = if polish {
+        format!("# {} · rozmowa {id}\n\n_Od {created}_\n", session.label)
+    } else {
+        format!("# {} · conversation {id}\n\n_From {created}_\n", session.label)
+    };
     for m in messages {
-        let who = if m.role == "user" { "Ty".to_string() } else { m.profile.unwrap_or_else(|| "Model".into()) };
+        let who = if m.role == "user" {
+            crate::ui::tr("Ty", "You").to_string()
+        } else {
+            m.profile.unwrap_or_else(|| "Model".into())
+        };
         md.push_str(&format!("\n---\n\n**{who}** · {}\n\n{}\n", m.created, m.text.trim()));
     }
     let dir = folder(&session.name);
     fs::create_dir_all(&dir)?;
     let day = created.split(' ').next().unwrap_or("");
-    let path = dir.join(format!("{day}-rozmowa-{id}.md"));
+    let path = dir.join(format!("{day}-{}-{id}.md", crate::ui::tr("rozmowa", "conversation")));
     fs::write(&path, md)?;
     Ok(path)
 }

@@ -232,7 +232,11 @@ fn call(tools: &[Tool], params: &Value, session: &str, done: &mut Repeats) -> Va
             return result(format!("Done {times} times already in this request; that is the limit."), false);
         }
         let description = tools.iter().find(|t| t.name == name).map(|t| t.description.clone()).unwrap_or_default();
-        let question = format!("Powtórzenie ({}. raz w tej prośbie). {description}", times + 1);
+        let question = if crate::ui::polish() {
+            format!("Powtórzenie ({}. raz w tej prośbie). {description}", times + 1)
+        } else {
+            format!("Repeat (time {} in this request). {description}", times + 1)
+        };
         if let Err(refusal) = ask_user(&name, &question, &arguments.to_string()) {
             done.refused.insert(key);
             return result(refusal, false);
@@ -643,11 +647,18 @@ fn session_call(name: &str, args: &Map<String, Value>) -> anyhow::Result<String>
             if plain == sessions::DEFAULT {
                 sessions::delete(&plain)?;
             }
-            ask_user(
-                "session_delete",
-                &format!("Usuń sesję „{plain}” (do Kosza; rozmowy zostają w historii)."),
-                &format!("~/.config/kuterlapa/sessions/{plain} → Kosz"),
-            )
+            let (question, command) = if crate::ui::polish() {
+                (
+                    format!("Usuń sesję „{plain}” (do Kosza; rozmowy zostają w historii)."),
+                    format!("~/.config/kuterlapa/sessions/{plain} → Kosz"),
+                )
+            } else {
+                (
+                    format!("Delete session \"{plain}\" (to the Trash; the conversations stay in the history)."),
+                    format!("~/.config/kuterlapa/sessions/{plain} → Trash"),
+                )
+            };
+            ask_user("session_delete", &question, &command)
             .map_err(|e| anyhow::anyhow!(e))?;
             let name = sessions::delete(&plain)?;
             Ok(format!("Session {name} is in the Trash now."))

@@ -281,7 +281,10 @@ class Dictation:
                 return index
         _names, system = inputs()
         log(f"microphone {chosen!r} is not there; recording from the system's: {system}")
-        tell_core(f"note Mikrofon „{chosen}” niedostępny — nagrywam z systemowego ({system})")
+        if config.ui_polish():
+            tell_core(f"note Mikrofon „{chosen}” niedostępny — nagrywam z systemowego ({system})")
+        else:
+            tell_core(f"note Microphone “{chosen}” is not there — recording from the system's ({system})")
         return None
 
     def devices(self):

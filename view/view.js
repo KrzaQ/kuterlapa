@@ -3,6 +3,7 @@
 //
 // state = {
 //   scale: 1.3,
+//   language: "en" | "pl",
 //   session: "kuterlapa", label: "Kuterłapa", automatic: false,
 //   conversation: { kind: "Rozmowa" | "Polecenie", index: 3, count: 5, created: "2026-11-08 19:57" },
 //   other_session: false,  // the view shows another session than the current
@@ -31,6 +32,27 @@
 marked.setOptions({ gfm: true, breaks: true });
 
 const $ = (id) => document.getElementById(id);
+
+// The language the user chose (state.language); English until the first
+// render says otherwise.
+let polish = false;
+
+// The Polish or the English text.
+const tr = (pl, en) => (polish ? pl : en);
+
+// The kind of an item comes from the core in Polish: "Rozmowa" or "Polecenie".
+const kindLabel = (kind) => (kind === "Polecenie" ? tr("Polecenie", "Command") : tr("Rozmowa", "Conversation"));
+
+// The fixed texts of index.html, in the chosen language.
+function drawLabels() {
+  document.documentElement.lang = tr("pl", "en");
+  $("sessions-heading").textContent = tr("Sesje", "Sessions");
+  $("items-heading").textContent = tr("W tej sesji", "In this session");
+  $("hint").textContent = tr(
+    "↑ ↓ przewijanie · ← → poprzednia / następna rozmowa lub polecenie · Y mów · B zamknij",
+    "↑ ↓ scroll · ← → previous / next conversation or command · Y speak · B close",
+  );
+}
 
 function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -68,7 +90,7 @@ const unfolded = new Set();
 function message(m) {
   const div = document.createElement("div");
   div.className = `message ${m.role}`;
-  const who = m.role === "user" ? "Ty" : m.profile || "Model";
+  const who = m.role === "user" ? tr("Ty", "You") : m.profile || "Model";
   // What the model did comes before its answer, folded: the summary line
   // shows, the tool calls and the thinking open with a click.
   const work = m.work
@@ -83,16 +105,18 @@ function message(m) {
   return div;
 }
 
-// 537, 4,2k, 19,8k, 250k, 1,2M
+// 537, 4,2k, 19,8k, 250k, 1,2M (in English with a point: 4.2k)
 function tokens(n) {
+  const point = tr(",", ".");
   if (n < 1000) return String(n);
-  if (n < 100000) return (n / 1000).toFixed(1).replace(".", ",") + "k";
+  if (n < 100000) return (n / 1000).toFixed(1).replace(".", point) + "k";
   if (n < 1000000) return Math.floor(n / 1000) + "k";
-  return (n / 1000000).toFixed(1).replace(".0", "").replace(".", ",") + "M";
+  return (n / 1000000).toFixed(1).replace(".0", "").replace(".", point) + "M";
 }
 
-// "1 wywołanie", "3 wywołania", "5 wywołań"
+// "1 wywołanie", "3 wywołania", "5 wywołań"; "1 call", "3 calls"
 function calls(n) {
+  if (!polish) return `${n} ${n === 1 ? "call" : "calls"}`;
   const word = n === 1 ? "wywołanie"
     : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "wywołania" : "wywołań";
   return `${n} ${word}`;
@@ -108,11 +132,11 @@ function summaryHtml(w, live) {
   const failed = steps.filter((s) => s.state === "failed").length;
   // Some engines count the tokens read only at the end of a call.
   const input = live && !w.input ? "…" : tokens(w.input || 0);
-  const parts = [`<span class="tokens">${input}</span> wej.`,
-    `<span class="tokens">${tokens(w.output || 0)}</span> wyj.`];
+  const parts = [`<span class="tokens">${input}</span> ${tr("wej.", "in")}`,
+    `<span class="tokens">${tokens(w.output || 0)}</span> ${tr("wyj.", "out")}`];
   if (w.context) {
     const share = w.window ? ` (${Math.round((w.context * 100) / w.window)}%)` : "";
-    parts.push(`kontekst <span class="tokens">${tokens(w.context)}${w.window ? "/" + tokens(w.window) : ""}</span>${share}`);
+    parts.push(`${tr("kontekst", "context")} <span class="tokens">${tokens(w.context)}${w.window ? "/" + tokens(w.window) : ""}</span>${share}`);
   }
   if (steps.length) parts.push(`🔧 ${calls(steps.length)}` + (failed ? ` <span class="failed">(${failed} ✗)</span>` : ""));
   parts.push(live ? '<span class="seconds"></span>' : `${Math.round(w.seconds || 0)} s`);
@@ -161,7 +185,7 @@ function drawLive() {
     const div = document.createElement("div");
     div.id = "live";
     div.className = "message assistant working";
-    div.innerHTML = `<div class="meta">${escapeHtml(live.profile || "Model")} · pracuje…</div>` +
+    div.innerHTML = `<div class="meta">${escapeHtml(live.profile || "Model")} · ${tr("pracuje…", "working…")}</div>` +
       `<div class="work">${workHtml(live, true)}</div>`;
     box.appendChild(div);
     const thinking = div.querySelector(".thinking");
@@ -188,6 +212,8 @@ function work(state) {
 }
 
 function render(state) {
+  polish = state.language === "pl";
+  drawLabels();
   document.documentElement.style.setProperty("--scale", state.scale || 1);
   // An empty dark screen, behind the overlay for its screenshots.
   document.body.classList.toggle("backdrop", !!state.backdrop);
@@ -207,25 +233,27 @@ function render(state) {
     const li = document.createElement("li");
     li.className = (it.current ? "current " : "") + (it.kind === "Polecenie" ? "command" : "conversation");
     const day = (it.created || "").slice(5);
-    li.innerHTML = `<span class="title">${escapeHtml(it.title || "(bez pytania)")}</span>` +
-      `<span class="when">${escapeHtml(it.kind)} · ${escapeHtml(day)}</span>`;
+    li.innerHTML = `<span class="title">${escapeHtml(it.title || tr("(bez pytania)", "(no question)"))}</span>` +
+      `<span class="when">${escapeHtml(kindLabel(it.kind))} · ${escapeHtml(day)}</span>`;
     items.appendChild(li);
   }
   const current = items.querySelector("li.current");
   if (current) current.scrollIntoView({ block: "nearest" });
 
   const c = state.conversation || {};
-  $("title").textContent = (state.label || state.session || "") + (state.other_session ? " (inna sesja)" : "");
-  const mode = state.automatic ? " · sesja z okna" : "";
+  $("title").textContent = (state.label || state.session || "") + (state.other_session ? tr(" (inna sesja)", " (other session)") : "");
+  const mode = state.automatic ? tr(" · sesja z okna", " · session from the window") : "";
   $("where").textContent = c.count
-    ? `${c.kind} · ${c.index} z ${c.count} · od ${c.created || "?"}${mode}`
-    : `Brak rozmów${mode}`;
+    ? polish
+      ? `${c.kind} · ${c.index} z ${c.count} · od ${c.created || "?"}${mode}`
+      : `${kindLabel(c.kind)} · ${c.index} of ${c.count} · from ${c.created || "?"}${mode}`
+    : `${tr("Brak rozmów", "No conversations")}${mode}`;
 
   const box = $("messages");
   const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   box.innerHTML = "";
   if (!(state.messages || []).length) {
-    box.innerHTML = '<div class="empty">Tu pojawi się rozmowa. Naciśnij Y i mów.</div>';
+    box.innerHTML = `<div class="empty">${tr("Tu pojawi się rozmowa. Naciśnij Y i mów.", "The conversation shows here. Press Y and speak.")}</div>`;
   }
   const nodes = (state.messages || []).map(message);
   nodes.forEach((n) => box.appendChild(n));

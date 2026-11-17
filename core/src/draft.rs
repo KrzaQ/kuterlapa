@@ -22,7 +22,20 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const EDIT_PROMPT: &str = "Edytujesz szkic tekstu. Użytkownik dyktuje go głosem i wyśle w innej \
+const EDIT_PROMPT_EN: &str = "You edit a draft of a text. The user dictates it by voice and will send \
+it in another application. You get the current draft and a new utterance from the user. The utterance \
+is either an edit instruction (for example \"replace X with Y\", \"shorter\", \"make a list of this\", \
+\"translate into Polish\"), or more text to add at the end. Speech recognition is sometimes not \
+accurate: correct the obvious mistakes. You also get the earlier instructions for this draft. The new \
+utterance often corrects what went wrong with them (\"no, no\", \"you keep losing…\"), so read it \
+together with them. \
+When the user spells something or dictates an address (letters, names of symbols such as @ or dot), \
+give that part to the spell_decode tool: speech recognition writes the names of letters in its own way, \
+and the tool knows them for the language of the speech. The notes (memory_search, memory_read) tell \
+how the user usually writes addresses and names. Return only the new, full draft: no comments, no \
+quotation marks, no code blocks.";
+
+const EDIT_PROMPT_PL: &str = "Edytujesz szkic tekstu. Użytkownik dyktuje go głosem i wyśle w innej \
 aplikacji. Dostajesz obecny szkic i nową wypowiedź użytkownika. Wypowiedź jest albo poleceniem \
 edycji (na przykład „zamień X na Y”, „krócej”, „zrób z tego listę”, „przetłumacz na angielski”), \
 albo dalszym tekstem do dopisania na końcu. Rozpoznanie mowy bywa niedokładne: popraw oczywiste \
@@ -157,7 +170,11 @@ impl Draft {
                 return None;
             }
             if s.text.is_empty() {
-                s.history = vec![format!("(pierwsze dyktowanie) {pending}")];
+                s.history = vec![if crate::ui::polish() {
+                    format!("(pierwsze dyktowanie) {pending}")
+                } else {
+                    format!("(first dictation) {pending}")
+                }];
                 s.text = pending;
                 s.last_edit = None;
                 drop(s);
@@ -181,15 +198,23 @@ impl Draft {
             s.history.iter().enumerate().map(|(i, h)| format!("{}. {h}", i + 1)).collect::<Vec<_>>().join("\n")
         };
         self.show();
+        let polish = crate::ui::polish();
         let earlier = if earlier.is_empty() {
             String::new()
-        } else {
+        } else if polish {
             format!("Wcześniejsze polecenia do tego szkicu, od najstarszego (już wykonane):\n{earlier}\n\n")
+        } else {
+            format!("The earlier instructions for this draft, oldest first (already done):\n{earlier}\n\n")
         };
-        let user = format!("Szkic:\n<<<\n{before}\n>>>\n\n{earlier}Nowa wypowiedź użytkownika:\n<<<\n{instruction}\n>>>");
+        let user = if polish {
+            format!("Szkic:\n<<<\n{before}\n>>>\n\n{earlier}Nowa wypowiedź użytkownika:\n<<<\n{instruction}\n>>>")
+        } else {
+            format!("Draft:\n<<<\n{before}\n>>>\n\n{earlier}The new utterance from the user:\n<<<\n{instruction}\n>>>")
+        };
         // Tools that only read: decoding spelled letters, and the notes.
         let session = crate::sessions::current_name();
-        let result = engines::complete_reading(&profile, EDIT_PROMPT, &user, &session, DRAFT_TOOLS);
+        let prompt = crate::ui::tr(EDIT_PROMPT_PL, EDIT_PROMPT_EN);
+        let result = engines::complete_reading(&profile, prompt, &user, &session, DRAFT_TOOLS);
         {
             let mut s = self.state.lock().unwrap();
             s.busy = false;
@@ -200,7 +225,7 @@ impl Draft {
                     s.history.push(instruction.clone());
                     s.last_edit = Some((before, instruction, profile.name.clone()));
                 }
-                Ok(_) => s.error = Some("model zwrócił pusty tekst".into()),
+                Ok(_) => s.error = Some(crate::ui::tr("model zwrócił pusty tekst", "the model returned empty text").into()),
                 // Discarded with B while the model worked: nothing to show.
                 Err(e) if engines::is_cancelled(&e) => {}
                 Err(e) => {
@@ -271,10 +296,11 @@ impl Draft {
             let redo = !s.busy
                 && !s.recording
                 && s.last_edit.as_ref().is_some_and(|(_, _, by)| by != name);
-            let note = if redo {
-                format!("Profil: {name} · za chwilę poprawi szkic od nowa")
-            } else {
-                format!("Profil: {name}")
+            let note = match (redo, crate::ui::polish()) {
+                (true, true) => format!("Profil: {name} · za chwilę poprawi szkic od nowa"),
+                (false, true) => format!("Profil: {name}"),
+                (true, false) => format!("Profile: {name} · will redo the draft in a moment"),
+                (false, false) => format!("Profile: {name}"),
             };
             s.note = Some(note.clone());
             (note, redo.then_some(s.takeover))
@@ -340,7 +366,7 @@ impl Draft {
             // Only a note, no draft: a small view with the note alone.
             let state = json!({
                 "visible": true, "title": s.note.clone().unwrap_or_default(), "status": "", "text": "",
-                "hint": "L: następny profil",
+                "hint": crate::ui::tr("L: następny profil", "L: next profile"),
             });
             drop(s);
             shell::overlay(&state);
@@ -351,12 +377,18 @@ impl Draft {
         } else if s.recording {
             listening()
         } else if s.busy {
-            match &s.working_on {
-                Some(instruction) => format!("{profile} poprawia szkic: „{}”", short(instruction, 120)),
-                None => format!("{profile} poprawia szkic…"),
+            match (&s.working_on, crate::ui::polish()) {
+                (Some(instruction), true) => format!("{profile} poprawia szkic: „{}”", short(instruction, 120)),
+                (None, true) => format!("{profile} poprawia szkic…"),
+                (Some(instruction), false) => format!("{profile} is editing the draft: “{}”", short(instruction, 120)),
+                (None, false) => format!("{profile} is editing the draft…"),
             }
         } else if let Some(e) = &s.error {
-            format!("Błąd: {e}")
+            if crate::ui::polish() {
+                format!("Błąd: {e}")
+            } else {
+                format!("Error: {e}")
+            }
         } else {
             String::new()
         };
@@ -368,12 +400,13 @@ impl Draft {
             text.push_str(s.pending.trim());
         }
         let hint = if s.text.is_empty() && s.recording {
-            "X: koniec · A: wpisz · B: anuluj"
+            crate::ui::tr("X: koniec · A: wpisz · B: anuluj", "X: stop · A: type · B: cancel")
         } else {
-            "X: popraw głosem · A: wpisz · B: odrzuć"
+            crate::ui::tr("X: popraw głosem · A: wpisz · B: odrzuć", "X: edit by voice · A: type · B: discard")
         };
+        let title = format!("{} · {profile}", crate::ui::tr("Szkic", "Draft"));
         let mut state = json!({
-            "visible": true, "title": format!("Szkic · {profile}"), "status": status, "text": text, "hint": hint,
+            "visible": true, "title": title, "status": status, "text": text, "hint": hint,
         });
         // What the user said so far, small under the draft: the latest
         // instructions, numbered.
@@ -381,10 +414,12 @@ impl Draft {
             let from = s.history.len().saturating_sub(SHOWN_HISTORY);
             let mut lines: Vec<String> =
                 s.history[from..].iter().enumerate().map(|(i, h)| format!("{}. {}", from + i + 1, short(h, 90))).collect();
+            let polish = crate::ui::polish();
             if from > 0 {
-                lines.insert(0, format!("… i {from} wcześniej"));
+                lines.insert(0, if polish { format!("… i {from} wcześniej") } else { format!("… and {from} earlier") });
             }
-            state["detail"] = json!(format!("Polecenia:\n{}", lines.join("\n")));
+            let heading = crate::ui::tr("Polecenia", "Instructions");
+            state["detail"] = json!(format!("{heading}:\n{}", lines.join("\n")));
         }
         drop(s);
         shell::overlay(&state);
@@ -404,8 +439,9 @@ fn short(text: &str, count: usize) -> String {
 /// "Słucham…", with the microphone when the user chose one: then the
 /// system's default input is not what records.
 fn listening() -> String {
+    let word = crate::ui::tr("Słucham…", "Listening…");
     match crate::microphone::chosen() {
-        Some(name) => format!("Słucham… · 🎙 {name}"),
-        None => "Słucham…".into(),
+        Some(name) => format!("{word} · 🎙 {name}"),
+        None => word.into(),
     }
 }

@@ -42,8 +42,10 @@ Expect the author's messages to come from dictation, with words misheard.
 
 ## Conventions
 
-- Code, comments and documentation in English. User-facing text in the
-  app may be Polish.
+- Code, comments and documentation in English. User-facing text and the
+  models' prompts exist in English and Polish (`language` in config.toml):
+  write both, next to each other, with `ui::tr("…", "…")` in Rust,
+  `tr(…, …)` in Swift (`Language.swift`) and in `view/view.js`.
 - Comments explain why, not what.
 - Commits:
   - subject in imperative mood, under about 70 characters, with a module

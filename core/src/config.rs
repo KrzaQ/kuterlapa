@@ -1,5 +1,9 @@
 //! Settings in ~/.config/kuterlapa/config.toml. Every key is optional.
 //!
+//!   # The language of what Kuterlapa shows and says, and of its prompts:
+//!   # "en" (the default) or "pl".
+//!   language = "en"
+//!
 //!   [speech]
 //!   # The speech provider: a program that speaks the speech protocol
 //!   # (docs/protocol.md). Empty disables speech.
@@ -26,6 +30,7 @@ use std::fs;
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
+    pub language: String,
     pub speech: Speech,
     pub voice: Voice,
     pub embed: Embed,

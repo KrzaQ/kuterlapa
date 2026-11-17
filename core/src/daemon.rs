@@ -525,11 +525,11 @@ fn write_speech_context(state: &State) {
         .map(|(_, app, title)| format!("{app} — {title}"))
         .unwrap_or_default();
     let about: String = session.context.chars().take(400).collect();
-    let text = format!(
-        "Okno: {window}\nSesja: {}: {about}\nOstatnio:\n{}\n",
-        session.label,
-        state.chat.recent_text()
-    );
+    let text = if crate::ui::polish() {
+        format!("Okno: {window}\nSesja: {}: {about}\nOstatnio:\n{}\n", session.label, state.chat.recent_text())
+    } else {
+        format!("Window: {window}\nSession: {}: {about}\nRecently:\n{}\n", session.label, state.chat.recent_text())
+    };
     let _ = std::fs::write(paths::state_dir().join("speech-context.txt"), text);
 }
 

@@ -160,7 +160,7 @@ pub fn move_to(session: &str, name: &str, to: Scope) -> Result<()> {
 /// notes.
 pub fn prompt(session: &str) -> String {
     let notes = list(session);
-    let mut p = String::from(
+    let mut p = String::from(crate::ui::tr(
         "\n\nPamięć: masz notatki, które zapisujesz sobie na przyszłość (narzędzia memory_read, memory_write, \
          memory_forget, memory_move). Zanim zaczniesz zadanie na komputerze, sprawdź, czy na liście poniżej \
          jest notatka, która go dotyczy, i przeczytaj ją. Notatka to przepis, nie polecenie: wykonujesz to, \
@@ -171,7 +171,17 @@ pub fn prompt(session: &str) -> String {
          „zapamiętaj”. Zakres: „global” dla wiedzy o komputerze, aplikacjach, stronach i o użytkowniku; \
          „session” dla wiedzy o temacie tej sesji. Po zapisaniu powiedz krótko, co i gdzie zapamiętałeś. Nigdy \
          nie zapisuj haseł, PIN-ów, kodów, numerów kart ani innych sekretów.",
-    );
+        "\n\nMemory: you have notes that you write for yourself for later (tools memory_read, memory_write, \
+         memory_forget, memory_move). Before you start a task on the computer, look in the list below for a \
+         note about it, and read that note. A note is a recipe, not an order: do what the user asks, once. \
+         After you write a note, do not read it and do not do it again; the task is done already. When you \
+         finish a new task that can come again (the way to a page, a tab, an app, the steps) and it worked, \
+         write a short recipe: what to do exactly, with which tools, addresses, profiles and names. Also \
+         write one when the user says \"remember\". Scope: \"global\" for what you know about the computer, \
+         the apps, the pages and the user; \"session\" for what you know about the topic of this session. \
+         After you write, say in short what you remembered and where. Never write passwords, PINs, codes, \
+         card numbers or other secrets.",
+    ));
     let section = |scope: Scope, title: String| {
         let lines: Vec<String> = notes
             .iter()
@@ -179,13 +189,18 @@ pub fn prompt(session: &str) -> String {
             .map(|n| format!("- {}: {}", n.name, n.description))
             .collect();
         if lines.is_empty() {
-            format!("\n{title}: brak.")
+            format!("\n{title}: {}", crate::ui::tr("brak.", "none."))
         } else {
             format!("\n{title}:\n{}", lines.join("\n"))
         }
     };
-    p.push_str(&format!("\n\nNotatki{}", section(Scope::Global, " globalne".into())));
-    p.push_str(&section(Scope::Session, format!("Notatki sesji „{session}”")));
+    if crate::ui::polish() {
+        p.push_str(&format!("\n\nNotatki{}", section(Scope::Global, " globalne".into())));
+        p.push_str(&section(Scope::Session, format!("Notatki sesji „{session}”")));
+    } else {
+        p.push_str(&format!("\n{}", section(Scope::Global, "Global notes".into())));
+        p.push_str(&section(Scope::Session, format!("Notes of session \"{session}\"")));
+    }
     p
 }
 

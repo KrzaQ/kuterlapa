@@ -74,6 +74,16 @@ class Settings:
     sound_error: str = "/System/Library/Sounds/Basso.aiff"
 
 
+def ui_polish():
+    """Whether Kuterlapa speaks Polish to the user: `language = "pl"` in
+    the core's config.toml. English otherwise."""
+    try:
+        with (CONFIG / "config.toml").open("rb") as f:
+            return str(tomllib.load(f).get("language", "")).strip() == "pl"
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+
+
 def load():
     """Read speech.toml. Unknown keys are an error, so a typo is visible."""
     path = CONFIG / "speech.toml"

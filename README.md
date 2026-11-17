@@ -93,7 +93,7 @@ stable identity: see `Makefile.local.example`.
 
 All in `~/.config/kuterlapa/`:
 
-- `config.toml`: which speech and voice providers the core starts.
+- `config.toml`: the language of the labels, the notes and the models' prompts (`language`: `"en"` or `"pl"`), and which speech and voice providers the core starts.
 - `profiles.json`: model profiles (engine, model, effort) that L and ZL
   switch between. `"local": true` marks a model that runs on your own
   machines. Only such profiles get the tools marked `private = true`.

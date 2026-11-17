@@ -46,16 +46,17 @@ pub fn choose(name: &str) -> String {
 pub fn choose_in_overlay(restore: impl Fn()) -> String {
     let v = match voices() {
         Ok(v) => v,
-        Err(e) => return format!("Nie mam listy głosów: {e}"),
+        Err(e) if crate::ui::polish() => return format!("Nie mam listy głosów: {e}"),
+        Err(e) => return format!("I have no list of voices: {e}"),
     };
     if v.voices.len() < 2 {
-        return "Jest tylko jeden głos lektora".into();
+        return crate::ui::tr("Jest tylko jeden głos lektora", "The narrator has only one voice").into();
     }
     let names: Vec<&String> = v.voices.iter().take(crate::approvals::MAX_OPTIONS).collect();
     let options = names.iter().map(|n| if **n == v.chosen { format!("{n} ✓") } else { n.to_string() }).collect();
     let question = lejce::Question {
         tool: None,
-        text: "Którym głosem czytać?".into(),
+        text: crate::ui::tr("Którym głosem czytać?", "Which voice do I read with?").into(),
         detail: String::new(),
         options,
         multiple: false,
@@ -63,17 +64,21 @@ pub fn choose_in_overlay(restore: impl Fn()) -> String {
     // The mark starts on the current voice. With more voices than rows,
     // the current one may not be shown; then it starts on the first.
     let start = names.iter().position(|n| **n == v.chosen).unwrap_or(0);
-    match crate::approvals::show_marked("Lektor", &question, start, restore) {
+    match crate::approvals::show_marked(crate::ui::tr("Lektor", "Narrator"), &question, start, restore) {
         Some(lejce::Answer::Chose(picked)) => {
             let Some(name) = picked.first().map(|&i| names[i].clone()) else { return String::new() };
             let done = choose(&name);
             if done != "ok" {
-                return format!("Nie zmieniłem głosu: {done}");
+                return if crate::ui::polish() {
+                    format!("Nie zmieniłem głosu: {done}")
+                } else {
+                    format!("I did not change the voice: {done}")
+                };
             }
-            send("say Tak teraz brzmię.");
-            format!("Lektor: {name}")
+            send(crate::ui::tr("say Tak teraz brzmię.", "say This is how I sound now."));
+            format!("{}: {name}", crate::ui::tr("Lektor", "Narrator"))
         }
         Some(_) => String::new(),
-        None => "Najpierw odpowiedz na pytanie, które czeka".into(),
+        None => crate::ui::tr("Najpierw odpowiedz na pytanie, które czeka", "First answer the question that waits").into(),
     }
 }

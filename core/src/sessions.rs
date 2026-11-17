@@ -117,16 +117,36 @@ pub fn recent() -> Vec<(Session, Option<u64>)> {
     list
 }
 
-/// "przed chwilą", "5 min temu", "3 godz. temu", "wczoraj", "4 dni temu".
+/// "przed chwilą", "5 min temu", "3 godz. temu", "wczoraj", "4 dni temu";
+/// in English "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago".
 pub fn ago(at: Option<u64>) -> String {
-    let Some(at) = at else { return "nieużywana".into() };
+    use crate::ui::{polish, tr};
+    let Some(at) = at else { return tr("nieużywana", "not used").into() };
     let s = now().saturating_sub(at);
     match s {
-        0..=59 => "przed chwilą".into(),
-        60..=3599 => format!("{} min temu", s / 60),
-        3600..=86_399 => format!("{} godz. temu", s / 3600),
-        86_400..=172_799 => "wczoraj".into(),
-        _ => format!("{} dni temu", s / 86_400),
+        0..=59 => tr("przed chwilą", "just now").into(),
+        60..=3599 => {
+            if polish() {
+                format!("{} min temu", s / 60)
+            } else {
+                format!("{} min ago", s / 60)
+            }
+        }
+        3600..=86_399 => {
+            if polish() {
+                format!("{} godz. temu", s / 3600)
+            } else {
+                format!("{} h ago", s / 3600)
+            }
+        }
+        86_400..=172_799 => tr("wczoraj", "yesterday").into(),
+        _ => {
+            if polish() {
+                format!("{} dni temu", s / 86_400)
+            } else {
+                format!("{} days ago", s / 86_400)
+            }
+        }
     }
 }
 
@@ -140,20 +160,30 @@ pub fn panel() -> serde_json::Value {
             // The first line of the context that is not a heading.
             let about = s.context.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with('#')).unwrap_or("");
             let about: String = about.chars().take(56).collect();
-            let mark = if s.name == current { "● teraz · " } else { "" };
+            let mark = if s.name == current { crate::ui::tr("● teraz · ", "● now · ") } else { "" };
             let when = if s.name == current { String::new() } else { ago(at) };
             let text = [when, about].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" · ");
             serde_json::json!({ "keys": s.label, "text": format!("{mark}{text}") })
         })
         .collect();
-    let mode = if automatic() { "wybiera okno (auto)" } else { "lepka" };
+    use crate::ui::{polish, tr};
+    let mode =
+        if automatic() { tr("wybiera okno (auto)", "the window picks it (auto)") } else { tr("lepka", "sticky") };
+    let title = if polish() {
+        format!("Sesje · bieżąca: {current} · {mode}")
+    } else {
+        format!("Sessions · current: {current} · {mode}")
+    };
     serde_json::json!({
         "visible": true,
-        "title": format!("Sesje · bieżąca: {current} · {mode}"),
-        "help": [{ "title": "Ostatnio używane", "rows": rows }],
+        "title": title,
+        "help": [{ "title": tr("Ostatnio używane", "Recently used"), "rows": rows }],
         "help_key_width": 120,
         "width": 560,
-        "hint": "Powiedz: „przejdź do sesji …” · B: zamknij · zamyka się sama po 30 s",
+        "hint": tr(
+            "Powiedz: „przejdź do sesji …” · B: zamknij · zamyka się sama po 30 s",
+            "Say: “go to session …” · B: close · closes by itself after 30 s",
+        ),
     })
 }
 
