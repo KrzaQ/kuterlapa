@@ -190,6 +190,15 @@ class Dictation:
         self.backend = backend
         self.settings = settings
         self.lock = threading.Lock()
+        # Closing a stream and opening one never run at the same time.
+        # Opening restarts PortAudio, and a new stream can get the old one's
+        # address: a late close of the old stream then closed the new one,
+        # and every recording after it failed ("Invalid stream pointer").
+        self.audio_lock = threading.Lock()
+        # Streams given to a closing thread and not closed yet. PortAudio
+        # restarts only when there are none.
+        self.closing = 0
+        self.closing_lock = threading.Lock()
         self.recording = False
         self.frames = None  # audio callback -> segmenter thread
         self.pieces = None  # segmenter thread -> transcriber thread
@@ -220,13 +229,29 @@ class Dictation:
                     continue
                 stream, self.stream = self.stream, None
                 self.pre_roll.clear()
-            closer = threading.Thread(target=lambda: (stream.abort(), stream.close()), daemon=True)
+            self._closing(1)
+            closer = threading.Thread(target=self._close, args=(stream,), daemon=True)
             closer.start()
             closer.join(CLOSE_TIMEOUT_S)
             if closer.is_alive():
                 log("closing the microphone hung in CoreAudio; exiting so the core restarts us")
                 os._exit(3)
             log("microphone closed after idle time")
+
+    def _closing(self, step):
+        with self.closing_lock:
+            self.closing += step
+
+    def _close(self, stream):
+        """Close a stream; the caller counted it with _closing(1) first."""
+        try:
+            with self.audio_lock:
+                stream.abort()
+                stream.close()
+        except sd.PortAudioError as e:
+            log(f"audio: closing the microphone: {e}")
+        finally:
+            self._closing(-1)
 
     def _open_stream(self):
         def on_audio(indata, _frames, _time, status):
@@ -243,10 +268,15 @@ class Dictation:
         # default input, and the provider kept recording from the old one,
         # which gave silence. With no stream open, start PortAudio again so
         # it sees the devices as they are now.
-        if self.stream is None:
+        # A just-opened stream is not idle: the idle closer must not take it.
+        self.last_used = time.monotonic()
+        with self.closing_lock:
+            idle = self.closing == 0
+        if self.stream is None and idle:
             try:
-                sd._terminate()
-                sd._initialize()
+                with self.audio_lock:
+                    sd._terminate()
+                    sd._initialize()
             except Exception as e:  # noqa: BLE001 - keep the old list then
                 log(f"audio: cannot reload the device list: {e}")
         device = self._device()
@@ -302,7 +332,16 @@ class Dictation:
                 return
             stream, self.stream = self.stream, None
             self.pre_roll.clear()
-        threading.Thread(target=lambda: (stream.abort(), stream.close()), daemon=True).start()
+        self._closing(1)
+        threading.Thread(target=self._close, args=(stream,), daemon=True).start()
+
+    def _alive(self):
+        """Whether the open stream still records. A stream PortAudio no
+        longer knows counts as dead, so it is opened again."""
+        try:
+            return self.stream.active
+        except sd.PortAudioError:
+            return False
 
     def toggle(self):
         with self.lock:
@@ -353,7 +392,7 @@ class Dictation:
         self.context = speech_context()
         if self.stream is None:
             self._open_stream()
-        elif not self.stream.active:
+        elif not self._alive():
             # The device went away (for example a headset), so open it again.
             log("microphone stream stopped; opening it again")
             try:
